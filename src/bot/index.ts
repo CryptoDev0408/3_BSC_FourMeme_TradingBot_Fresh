@@ -4,6 +4,20 @@ import { logger } from '../utils/logger';
 import { WELCOME_MESSAGE } from '../config/constants';
 import { getMainMenuKeyboard } from './keyboards/main.keyboard';
 import { User } from '../database/models';
+import {
+	showWalletsList,
+	showWalletDetail,
+	handleWalletGenerate,
+	handleWalletImport,
+	handleWalletRemove,
+	confirmWalletRemove,
+	showPrivateKey,
+	handleWalletActivate,
+	handleWithdrawInitiate,
+	handleWithdrawPercent,
+	handleWalletTextMessage,
+	clearWalletState,
+} from './handlers/wallet.handler';
 
 /**
  * Telegram Bot Instance
@@ -23,7 +37,8 @@ export async function initializeBot(): Promise<void> {
 
 		// Setup handlers
 		setupCommandHandlers();
-		setupCallbackHandlers();
+		setupMessageHandlers();
+		setupCallbackHandlers(); // <-- THIS WAS MISSING!
 		setupErrorHandlers();
 
 		logger.success('✅ Telegram Bot initialized successfully');
@@ -127,12 +142,41 @@ Need more help? Contact admin!
 }
 
 /**
+ * Setup message handlers
+ */
+function setupMessageHandlers(): void {
+	// Handle text messages (for multi-step interactions)
+	bot.on('message', async (msg) => {
+		// Skip commands
+		if (msg.text?.startsWith('/')) {
+			return;
+		}
+
+		const chatId = msg.chat.id.toString();
+
+		try {
+			// Try wallet handler first
+			const handled = await handleWalletTextMessage(msg);
+			if (handled) {
+				return;
+			}
+
+			// Add other handlers here in future steps
+		} catch (error: any) {
+			logger.error('Error handling message:', error.message);
+		}
+	});
+}
+
+/**
  * Setup callback query handlers
  */
 function setupCallbackHandlers(): void {
 	bot.on('callback_query', async (query) => {
 		const chatId = query.message?.chat.id.toString();
 		const data = query.data;
+
+		console.log('[BOT] Callback query received - chatId:', chatId, 'data:', data);
 
 		if (!chatId || !data) return;
 
@@ -142,6 +186,8 @@ function setupCallbackHandlers(): void {
 
 			// Route to appropriate handler
 			if (data === 'main_menu') {
+				console.log('[BOT] Routing to main_menu');
+				clearWalletState(chatId);
 				await bot.editMessageText(WELCOME_MESSAGE, {
 					chat_id: chatId,
 					message_id: query.message?.message_id,
@@ -149,14 +195,45 @@ function setupCallbackHandlers(): void {
 					reply_markup: getMainMenuKeyboard(),
 				});
 			} else if (data === 'wallets') {
-				await bot.editMessageText('💼 <b>Wallet Management</b>\n\n⏳ Coming soon in next steps...', {
-					chat_id: chatId,
-					message_id: query.message?.message_id,
-					parse_mode: 'HTML',
-					reply_markup: {
-						inline_keyboard: [[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]],
-					},
-				});
+				console.log('[BOT] Routing to wallets handler');
+				await showWalletsList(chatId, query.message?.message_id);
+			} else if (data.startsWith('wallets_page_')) {
+				const page = parseInt(data.split('_')[2]);
+				await showWalletsList(chatId, query.message?.message_id, page);
+			} else if (data.startsWith('wallet_view_')) {
+				const walletId = data.replace('wallet_view_', '');
+				await showWalletDetail(chatId, walletId, query.message?.message_id);
+			} else if (data === 'wallet_generate') {
+				await handleWalletGenerate(chatId, query.message?.message_id);
+			} else if (data === 'wallet_import') {
+				await handleWalletImport(chatId, query.message?.message_id);
+			} else if (data.startsWith('wallet_remove_')) {
+				if (data.startsWith('wallet_remove_confirm_')) {
+					const walletId = data.replace('wallet_remove_confirm_', '');
+					await confirmWalletRemove(chatId, walletId, query.message?.message_id);
+				} else {
+					const walletId = data.replace('wallet_remove_', '');
+					await handleWalletRemove(chatId, walletId, query.message?.message_id);
+				}
+			} else if (data.startsWith('wallet_showkey_')) {
+				const walletId = data.replace('wallet_showkey_', '');
+				await showPrivateKey(chatId, walletId);
+			} else if (data.startsWith('wallet_activate_')) {
+				const walletId = data.replace('wallet_activate_', '');
+				await handleWalletActivate(chatId, walletId, query.message?.message_id);
+			} else if (data.startsWith('wallet_refresh_')) {
+				const walletId = data.replace('wallet_refresh_', '');
+				await showWalletDetail(chatId, walletId, query.message?.message_id);
+			} else if (data.startsWith('wallet_withdraw_')) {
+				if (data.startsWith('wallet_withdraw_percent_')) {
+					const parts = data.split('_');
+					const walletId = parts[3];
+					const percent = parseInt(parts[4]);
+					await handleWithdrawPercent(chatId, walletId, percent, query.message?.message_id);
+				} else {
+					const walletId = data.replace('wallet_withdraw_', '');
+					await handleWithdrawInitiate(chatId, walletId, query.message?.message_id);
+				}
 			} else if (data === 'orders') {
 				await bot.editMessageText('📊 <b>Order Management</b>\n\n⏳ Coming soon in next steps...', {
 					chat_id: chatId,

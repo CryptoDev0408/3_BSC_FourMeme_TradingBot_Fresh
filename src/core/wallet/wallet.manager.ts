@@ -25,8 +25,9 @@ export async function generateWallet(
 		// Generate new wallet using ethers
 		const newWallet = ethers.Wallet.createRandom();
 
-		// Create wallet name
-		const name = walletName || `Wallet #${Date.now().toString().slice(-6)}`;
+		// Get wallet count to determine next wallet number
+		const walletCount = await getWalletCount(userId);
+		const name = walletName || `w${walletCount + 1}`;
 
 		// Validate name if provided
 		if (walletName) {
@@ -96,8 +97,9 @@ export async function importWallet(
 			return { success: false, error: ERROR_MESSAGES.ALREADY_EXISTS };
 		}
 
-		// Create wallet name
-		const name = walletName || `Imported #${Date.now().toString().slice(-6)}`;
+		// Get wallet count to determine next wallet number
+		const walletCount = await getWalletCount(userId);
+		const name = walletName || `w${walletCount + 1}`;
 
 		// Validate name if provided
 		if (walletName) {
