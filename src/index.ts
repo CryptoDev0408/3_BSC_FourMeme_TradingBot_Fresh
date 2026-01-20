@@ -2,6 +2,7 @@ import { config, validateConfig } from './config/config';
 import { database } from './database/connection';
 import { logger } from './utils/logger';
 import { initializeBot, stopBot } from './bot';
+import { initializeProvider } from './core/wallet';
 
 /**
  * Main application entry point
@@ -39,6 +40,10 @@ async function main() {
 		// Connect to database
 		logger.info('📦 Connecting to MongoDB...');
 		await database.connect(config.database.uri);
+
+		// Initialize BSC Provider
+		logger.info('🔗 Connecting to BSC network...');
+		initializeProvider();
 
 		// Initialize Telegram Bot
 		await initializeBot();
