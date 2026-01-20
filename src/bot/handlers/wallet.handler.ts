@@ -103,22 +103,20 @@ export async function showWalletsList(chatId: string, messageId?: number, page: 
 		console.log('[WALLET] Keyboard created');
 
 		if (messageId) {
-			console.log('[WALLET] Editing existing message:', messageId);
-			await bot.editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
-			console.log('[WALLET] Message edited successfully');
-		} else {
-			console.log('[WALLET] Sending new message');
-			await bot.sendMessage(chatId, text, {
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
-			console.log('[WALLET] Message sent successfully');
+			console.log('[WALLET] Deleting previous message:', messageId);
+			try {
+				await bot.deleteMessage(chatId, messageId);
+			} catch (deleteError) {
+				console.log('[WALLET] Could not delete message, continuing...');
+			}
 		}
+
+		console.log('[WALLET] Sending new message');
+		await bot.sendMessage(chatId, text, {
+			parse_mode: 'HTML',
+			reply_markup: keyboard,
+		});
+		console.log('[WALLET] Message sent successfully');
 	} catch (error: any) {
 		console.error('[WALLET] Error showing wallets list:', error);
 		logger.error('Error showing wallets list:', error.message);
@@ -175,18 +173,17 @@ ${wallet.isActive ? '✅ <b>Active Wallet</b>' : '⚪️ Inactive'}
 		const keyboard = getWalletDetailKeyboard(walletId, wallet.isActive);
 
 		if (messageId) {
-			await bot.editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
-		} else {
-			await bot.sendMessage(chatId, text, {
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				await bot.deleteMessage(chatId, messageId);
+			} catch (deleteError) {
+				// Ignore delete errors
+			}
 		}
+
+		await bot.sendMessage(chatId, text, {
+			parse_mode: 'HTML',
+			reply_markup: keyboard,
+		});
 	} catch (error: any) {
 		logger.error('Error showing wallet detail:', error.message);
 		await bot.sendMessage(chatId, '❌ Failed to load wallet details.');
@@ -198,12 +195,13 @@ ${wallet.isActive ? '✅ <b>Active Wallet</b>' : '⚪️ Inactive'}
  */
 export async function handleWalletGenerate(chatId: string, messageId?: number): Promise<void> {
 	try {
-		// Send generating message
+		// Delete previous message if exists
 		if (messageId) {
-			await bot.editMessageText('⏳ Generating wallet...', {
-				chat_id: chatId,
-				message_id: messageId,
-			});
+			try {
+				await bot.deleteMessage(chatId, messageId);
+			} catch (e) {
+				// Ignore delete errors
+			}
 		}
 
 		// Get user ID
@@ -281,22 +279,19 @@ Example:
 		});
 
 		if (messageId) {
-			await bot.editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: {
-					inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'wallets' }]],
-				},
-			});
-		} else {
-			await bot.sendMessage(chatId, text, {
-				parse_mode: 'HTML',
-				reply_markup: {
-					inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'wallets' }]],
-				},
-			});
+			try {
+				await bot.deleteMessage(chatId, messageId);
+			} catch (e) {
+				// Ignore delete errors
+			}
 		}
+
+		await bot.sendMessage(chatId, text, {
+			parse_mode: 'HTML',
+			reply_markup: {
+				inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'wallets' }]],
+			},
+		});
 	} catch (error: any) {
 		logger.error('Error in wallet import:', error.message);
 	}
@@ -393,18 +388,17 @@ Do you want to proceed?
 		const keyboard = getWalletRemoveConfirmKeyboard(walletId);
 
 		if (messageId) {
-			await bot.editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
-		} else {
-			await bot.sendMessage(chatId, text, {
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				await bot.deleteMessage(chatId, messageId);
+			} catch (e) {
+				// Ignore delete errors
+			}
 		}
+
+		await bot.sendMessage(chatId, text, {
+			parse_mode: 'HTML',
+			reply_markup: keyboard,
+		});
 	} catch (error: any) {
 		logger.error('Error in wallet remove:', error.message);
 	}
@@ -420,10 +414,11 @@ export async function confirmWalletRemove(
 ): Promise<void> {
 	try {
 		if (messageId) {
-			await bot.editMessageText('⏳ Removing wallet...', {
-				chat_id: chatId,
-				message_id: messageId,
-			});
+			try {
+				await bot.deleteMessage(chatId, messageId);
+			} catch (e) {
+				// Ignore delete errors
+			}
 		}
 
 		const userId = await getUserId(chatId);
@@ -567,18 +562,17 @@ Select amount to withdraw or enter custom amount:
 		const keyboard = getWithdrawAmountKeyboard(walletId);
 
 		if (messageId) {
-			await bot.editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
-		} else {
-			await bot.sendMessage(chatId, text, {
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				await bot.deleteMessage(chatId, messageId);
+			} catch (e) {
+				// Ignore delete errors
+			}
 		}
+
+		await bot.sendMessage(chatId, text, {
+			parse_mode: 'HTML',
+			reply_markup: keyboard,
+		});
 	} catch (error: any) {
 		logger.error('Error in withdraw initiate:', error.message);
 	}

@@ -96,15 +96,11 @@ export enum TransactionStatus {
 // BOT MESSAGES
 // ==============================================
 export const WELCOME_MESSAGE = `
-🤖 <b>Welcome to FourMeme BSC Trading Bot!</b>
+🚀 <b>Welcome to FourMeme Trading Bot!</b>
 
-This bot helps you trade on PancakeSwap V2 with:
-✅ Multi-wallet management
-✅ Automated TP/SL monitoring
-✅ Four.meme token scanner
-✅ Real-time position tracking
+Your professional BSC trading assistant for PancakeSwap V2. Trade smarter with multi-wallet management, automated TP/SL, and Four.meme token scanner. Get started by creating or importing a wallet!
 
-Get started by creating or importing a wallet!
+<i>⚡ Choose an option below to begin trading!</i>
 `;
 
 export const HELP_MESSAGE = `

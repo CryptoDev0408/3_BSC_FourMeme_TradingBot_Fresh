@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
-import { WELCOME_MESSAGE } from '../config/constants';
+import { WELCOME_MESSAGE, HELP_MESSAGE } from '../config/constants';
 import { getMainMenuKeyboard } from './keyboards/main.keyboard';
 import { User } from '../database/models';
 import {
@@ -81,15 +81,30 @@ function setupCommandHandlers(): void {
 			}
 
 			// Send welcome message with main menu
-			await bot.sendMessage(chatId, WELCOME_MESSAGE, {
-				parse_mode: 'HTML',
-				reply_markup: getMainMenuKeyboard(),
-			});
+			await bot.sendPhoto(
+				chatId,
+				'https://ipfs.io/ipfs/bafkreiebl7hx5sieh6obulfjpl76dl7zq5cgfp62n4tk3rnyjclvipcbby',
+				{
+					caption: WELCOME_MESSAGE,
+					parse_mode: 'HTML',
+					reply_markup: getMainMenuKeyboard(),
+				}
+			);
 
 			logger.bot(`User ${username || chatId} started the bot`);
 		} catch (error: any) {
 			logger.error('Error handling /start command:', error.message);
-			await bot.sendMessage(chatId, '❌ An error occurred. Please try again.');
+			logger.error('Full error:', error);
+			// Fallback to text message if photo fails
+			try {
+				await bot.sendMessage(chatId, WELCOME_MESSAGE, {
+					parse_mode: 'HTML',
+					reply_markup: getMainMenuKeyboard(),
+				});
+			} catch (fallbackError: any) {
+				logger.error('Fallback error:', fallbackError.message);
+				await bot.sendMessage(chatId, '❌ An error occurred. Please try again.');
+			}
 		}
 	});
 
@@ -188,12 +203,15 @@ function setupCallbackHandlers(): void {
 			if (data === 'main_menu') {
 				console.log('[BOT] Routing to main_menu');
 				clearWalletState(chatId);
-				await bot.editMessageText(WELCOME_MESSAGE, {
-					chat_id: chatId,
-					message_id: query.message?.message_id,
-					parse_mode: 'HTML',
-					reply_markup: getMainMenuKeyboard(),
-				});
+				await bot.sendPhoto(
+					chatId,
+					'https://ipfs.io/ipfs/bafkreiebl7hx5sieh6obulfjpl76dl7zq5cgfp62n4tk3rnyjclvipcbby',
+					{
+						caption: WELCOME_MESSAGE,
+						parse_mode: 'HTML',
+						reply_markup: getMainMenuKeyboard(),
+					}
+				);
 			} else if (data === 'wallets') {
 				console.log('[BOT] Routing to wallets handler');
 				await showWalletsList(chatId, query.message?.message_id);
@@ -235,30 +253,34 @@ function setupCallbackHandlers(): void {
 					await handleWithdrawInitiate(chatId, walletId, query.message?.message_id);
 				}
 			} else if (data === 'orders') {
-				await bot.editMessageText('📊 <b>Order Management</b>\n\n⏳ Coming soon in next steps...', {
-					chat_id: chatId,
-					message_id: query.message?.message_id,
+				if (query.message?.message_id) {
+					await bot.deleteMessage(chatId, query.message.message_id);
+				}
+				await bot.sendMessage(chatId, '📊 <b>Order Management</b>\n\n⏳ Coming soon in next steps...', {
 					parse_mode: 'HTML',
 					reply_markup: {
 						inline_keyboard: [[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]],
 					},
 				});
 			} else if (data === 'positions') {
-				await bot.editMessageText('💰 <b>Position Management</b>\n\n⏳ Coming soon in next steps...', {
-					chat_id: chatId,
-					message_id: query.message?.message_id,
+				if (query.message?.message_id) {
+					await bot.deleteMessage(chatId, query.message.message_id);
+				}
+				await bot.sendMessage(chatId, '💰 <b>Position Management</b>\n\n⏳ Coming soon in next steps...', {
 					parse_mode: 'HTML',
 					reply_markup: {
 						inline_keyboard: [[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]],
 					},
 				});
 			} else if (data === 'scanner') {
+				if (query.message?.message_id) {
+					await bot.deleteMessage(chatId, query.message.message_id);
+				}
 				const scannerStatus = config.monitoring.scannerEnabled ? '🟢 Active' : '🔴 Inactive';
-				await bot.editMessageText(
+				await bot.sendMessage(
+					chatId,
 					`🔍 <b>Four.meme Scanner Status</b>\n\nStatus: ${scannerStatus}\n\n⏳ Scanner coming soon in next steps...`,
 					{
-						chat_id: chatId,
-						message_id: query.message?.message_id,
 						parse_mode: 'HTML',
 						reply_markup: {
 							inline_keyboard: [[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]],
@@ -266,7 +288,15 @@ function setupCallbackHandlers(): void {
 					}
 				);
 			} else if (data === 'help') {
-				await bot.sendMessage(chatId, 'Use /help command for detailed instructions.');
+				if (query.message?.message_id) {
+					await bot.deleteMessage(chatId, query.message.message_id);
+				}
+				await bot.sendMessage(chatId, HELP_MESSAGE, {
+					parse_mode: 'HTML',
+					reply_markup: {
+						inline_keyboard: [[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]],
+					},
+				});
 			}
 		} catch (error: any) {
 			logger.error('Error handling callback query:', error.message);
