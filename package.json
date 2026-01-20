@@ -1,0 +1,49 @@
+{
+	"name": "fourmeme-bsc-trading-bot",
+	"version": "1.0.0",
+	"description": "High-performance BSC Trading Bot with PancakeSwap V2 integration and Four.meme migration scanner",
+	"main": "dist/index.js",
+	"scripts": {
+		"dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+		"build": "tsc",
+		"start": "node dist/index.js",
+		"start:pm2": "pm2 start ecosystem.config.js",
+		"stop:pm2": "pm2 stop ecosystem.config.js",
+		"restart:pm2": "pm2 restart ecosystem.config.js",
+		"logs:pm2": "pm2 logs fourmeme-bot",
+		"clean": "rm -rf dist"
+	},
+	"keywords": [
+		"bsc",
+		"trading-bot",
+		"pancakeswap",
+		"telegram-bot",
+		"defi",
+		"fourmeme"
+	],
+	"author": "",
+	"license": "MIT",
+	"dependencies": {
+		"node-telegram-bot-api": "^0.61.0",
+		"ethers": "^5.7.2",
+		"web3": "^1.9.0",
+		"mongoose": "^8.0.3",
+		"dotenv": "^16.4.7",
+		"winston": "^3.11.0",
+		"axios": "^1.8.4",
+		"crypto-js": "^4.2.0",
+		"bignumber.js": "^9.1.2",
+		"node-cache": "^5.1.2"
+	},
+	"devDependencies": {
+		"typescript": "^5.4.3",
+		"@types/node": "^20.11.0",
+		"@types/node-telegram-bot-api": "^0.64.2",
+		"@types/crypto-js": "^4.2.1",
+		"ts-node-dev": "^2.0.0",
+		"nodemon": "^3.0.1"
+	},
+	"engines": {
+		"node": ">=18.0.0"
+	}
+}
