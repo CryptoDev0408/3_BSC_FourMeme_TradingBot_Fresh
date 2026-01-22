@@ -168,23 +168,90 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 		const walletName = wallet?.name || 'Unknown';
 		const walletAddress = wallet?.address || 'Unknown';
 
-		let text = `📊 <b>${order.name}</b>\n\n`;
-		text += `Status: ${order.isActive ? '🟢 Active' : '🔴 Inactive'}\n\n`;
-		text += `<b>Configuration:</b>\n`;
-		text += `💼 Wallet: ${walletName} (${formatAddress(walletAddress)})\n`;
-		text += `💰 Trading Amount: ${formatBnb(order.tradingAmount)} BNB\n`;
-		text += `📊 Slippage: ${order.slippage}%\n\n`;
-		text += `<b>Take Profit:</b>\n`;
-		text += `🎯 Target: ${order.takeProfitPercent}%\n`;
-		text += `${formatToggle(order.takeProfitEnabled)}\n\n`;
-		text += `<b>Stop Loss:</b>\n`;
-		text += `🛑 Target: ${order.stopLossPercent}%\n`;
-		text += `${formatToggle(order.stopLossEnabled)}\n\n`;
-		text += `<b>Gas Settings:</b>\n`;
-		text += `⚡ Price: ${order.gasFee.gasPrice} Gwei\n`;
-		text += `⚙️ Limit: ${order.gasFee.gasLimit}\n`;
+		// Get wallet balance
+		let walletBalance = 0;
+		if (wallet?._id) {
+			const balanceResult = await updateWalletBalance(wallet._id.toString());
+			if (balanceResult.success && balanceResult.balance !== undefined) {
+				walletBalance = balanceResult.balance;
+			}
+		}
 
-		const keyboard = getOrderDetailKeyboard(orderId, order.isActive);
+		let text = `📊 <b>${order.name}</b>\n\n`;
+		text += `<b>Status:</b> ${order.isActive ? '🟢 Active' : '🔴 Inactive'}\n\n`;
+
+		text += `<b>💼 Wallet Information:</b>\n`;
+		text += `📛 Name: ${walletName}\n`;
+		text += `📍 Address: <code>${walletAddress}</code>\n`;
+		text += `💰 Balance: ${formatBnb(walletBalance)} BNB\n\n`;
+
+		text += `<b>⚙️ Order Configuration:</b>\n`;
+		text += `💵 Trading Amount: ${formatBnb(order.tradingAmount)} BNB\n`;
+		text += `🎯 Take Profit: ${order.takeProfitPercent}% ${formatToggle(order.takeProfitEnabled)}\n`;
+		text += `🛑 Stop Loss: ${order.stopLossPercent}% ${formatToggle(order.stopLossEnabled)}\n`;
+		text += `⚡ Gas Price: ${order.gasFee.gasPrice} Gwei\n`;
+		text += `📊 Slippage: ${order.slippage}%\n\n`;
+
+		if (order.isActive) {
+			text += `<i>Order is active and monitoring for opportunities</i>`;
+		} else {
+			text += `<i>Configure and activate your order to start trading</i>`;
+		}
+
+		const keyboard = {
+			inline_keyboard: [
+				// Row 1: Active/Pause
+				[{
+					text: order.isActive ? '⏸ Pause Order' : '▶️ Activate Order',
+					callback_data: `order_toggle_${orderId}`
+				}],
+			],
+		};
+
+		// Only show configuration options when order is inactive
+		if (!order.isActive) {
+			keyboard.inline_keyboard.push(
+				// Row 2: Set Trading Amount
+				[
+					{ text: '💰 Set Trading Amount', callback_data: `order_amount_label_${orderId}` },
+					{ text: `${formatBnb(order.tradingAmount)} BNB`, callback_data: `order_amount_input_${orderId}` },
+				],
+				// Row 3: TP Settings
+				[
+					{
+						text: order.takeProfitEnabled ? '✅ TP Enabled' : '❌ TP Disabled',
+						callback_data: `order_tptoggle_${orderId}`
+					},
+					{ text: `${order.takeProfitPercent}%`, callback_data: `order_tp_input_${orderId}` },
+				],
+				// Row 4: SL Settings
+				[
+					{
+						text: order.stopLossEnabled ? '✅ SL Enabled' : '❌ SL Disabled',
+						callback_data: `order_sltoggle_${orderId}`
+					},
+					{ text: `${order.stopLossPercent}%`, callback_data: `order_sl_input_${orderId}` },
+				],
+				// Row 5: Gas Settings
+				[
+					{ text: '⚡ Gas Settings', callback_data: `order_gas_label_${orderId}` },
+					{ text: `${order.gasFee.gasPrice} Gwei`, callback_data: `order_gas_input_${orderId}` },
+				],
+				// Row 6: Slippage
+				[
+					{ text: '📊 Slippage', callback_data: `order_slippage_label_${orderId}` },
+					{ text: `${order.slippage}%`, callback_data: `order_slippage_input_${orderId}` },
+				],
+				// Row 7: Manual Buy & Remove
+				[
+					{ text: '🪙 Manual Buy', callback_data: `order_manual_${orderId}` },
+					{ text: '🗑 Remove Order', callback_data: `order_remove_${orderId}` },
+				]
+			);
+		}
+
+		// Always show Back button at the end
+		keyboard.inline_keyboard.push([{ text: '🛡️ Back to Orders', callback_data: 'orders' }]);
 
 		if (messageId) {
 			await getBot().editMessageText(text, {
@@ -933,13 +1000,30 @@ export async function handleOrderToggle(chatId: string, orderId: string, message
 			return;
 		}
 
-		const status = result.order!.isActive ? '✅ activated' : '⏸ paused';
-		await getBot().answerCallbackQuery(chatId, { text: `Order ${status}!`, show_alert: false });
+		// Show success message
+		const status = result.order!.isActive ? '🟢 Active' : '🔴 Inactive';
+		const action = result.order!.isActive ? 'activated' : 'paused';
 
-		// Refresh order view
-		await showOrderDetail(chatId, orderId, messageId);
+		// Delete old message and send new one with updated status
+		if (messageId) {
+			try {
+				await getBot().deleteMessage(chatId, messageId);
+			} catch (error) {
+				// Ignore delete errors
+			}
+		}
+
+		await getBot().sendMessage(
+			chatId,
+			`✅ Order ${action} successfully!\n\nStatus: ${status}`,
+			{ parse_mode: 'HTML' }
+		);
+
+		// Show refreshed order view
+		await showOrderDetail(chatId, orderId);
 	} catch (error: any) {
 		logger.error('Failed to toggle order:', error.message);
+		await getBot().sendMessage(chatId, '❌ Failed to toggle order status. Please try again.');
 	}
 }
 
@@ -1095,15 +1179,45 @@ export async function showTPSLSettings(chatId: string, orderId: string, messageI
 		const order = await getOrderById(orderId, user._id.toString());
 		if (!order) return;
 
-		let text = '🎯 <b>Take Profit / Stop Loss Settings</b>\n\n';
-		text += `<b>Take Profit:</b>\n`;
-		text += `Target: ${order.takeProfitPercent}%\n`;
-		text += `Status: ${formatToggle(order.takeProfitEnabled)}\n\n`;
-		text += `<b>Stop Loss:</b>\n`;
-		text += `Target: ${order.stopLossPercent}%\n`;
-		text += `Status: ${formatToggle(order.stopLossEnabled)}`;
+		const text = `
+🎯 <b>Take Profit / Stop Loss Settings</b>
 
-		const keyboard = getOrderTPSLKeyboard(orderId);
+<b>Take Profit:</b>
+${order.takeProfitEnabled ? '✅ Enabled' : '❌ Disabled'}
+📈 Target: <b>${order.takeProfitPercent}%</b>
+
+<b>Stop Loss:</b>
+${order.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
+📉 Target: <b>${order.stopLossPercent}%</b>
+
+<i>Configure when to take profit or stop losses on your trades</i>
+		`.trim();
+
+		const keyboard = {
+			inline_keyboard: [
+				[
+					{
+						text: order.takeProfitEnabled ? '✅ TP Enabled' : '❌ TP Disabled',
+						callback_data: `order_tptoggle_${orderId}`
+					},
+					{
+						text: `📈 ${order.takeProfitPercent}%`,
+						callback_data: `order_tp_${orderId}`
+					},
+				],
+				[
+					{
+						text: order.stopLossEnabled ? '✅ SL Enabled' : '❌ SL Disabled',
+						callback_data: `order_sltoggle_${orderId}`
+					},
+					{
+						text: `📉 ${order.stopLossPercent}%`,
+						callback_data: `order_sl_${orderId}`
+					},
+				],
+				[{ text: '🛡️ Back', callback_data: `order_view_${orderId}` }],
+			],
+		};
 
 		if (messageId) {
 			await getBot().editMessageText(text, {
@@ -1237,6 +1351,176 @@ export async function handleOrderSetSlippage(
 		await showOrderDetail(chatId, orderId, messageId);
 	} catch (error: any) {
 		logger.error('Failed to set slippage:', error.message);
+	}
+}
+
+/**
+ * Handle direct amount input
+ */
+export async function handleAmountInput(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '💰 <b>Set Trading Amount</b>\n\nEnter the amount of BNB you want to trade:\n\n<i>Example: 0.1</i>';
+
+		userStates.set(chatId, {
+			action: 'order_amount_input',
+			orderId,
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show amount input:', error.message);
+	}
+}
+
+/**
+ * Handle direct TP input
+ */
+export async function handleTPInput(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '🎯 <b>Set Take Profit %</b>\n\nEnter the take profit percentage:\n\n<i>Example: 50</i>';
+
+		userStates.set(chatId, {
+			action: 'order_tp_input',
+			orderId,
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show TP input:', error.message);
+	}
+}
+
+/**
+ * Handle direct SL input
+ */
+export async function handleSLInput(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '🛑 <b>Set Stop Loss %</b>\n\nEnter the stop loss percentage:\n\n<i>Example: 25</i>';
+
+		userStates.set(chatId, {
+			action: 'order_sl_input',
+			orderId,
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show SL input:', error.message);
+	}
+}
+
+/**
+ * Handle direct gas input
+ */
+export async function handleGasInput(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '⚡ <b>Set Gas Price</b>\n\nEnter the gas price in Gwei:\n\n<i>Example: 5</i>';
+
+		userStates.set(chatId, {
+			action: 'order_gas_input',
+			orderId,
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show gas input:', error.message);
+	}
+}
+
+/**
+ * Handle direct slippage input
+ */
+export async function handleSlippageInput(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '📊 <b>Set Slippage</b>\n\nEnter the slippage percentage:\n\n<i>Example: 10</i>';
+
+		userStates.set(chatId, {
+			action: 'order_slippage_input',
+			orderId,
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show slippage input:', error.message);
 	}
 }
 
@@ -1462,6 +1746,255 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 			return true;
 		}
 
+		// Handle custom TP input for existing order
+		if (state.action === 'order_tp_custom') {
+			// Parse percentage
+			const percentage = parseFloat(text);
+
+			// Validate
+			if (isNaN(percentage) || percentage < 0.1) {
+				await getBot().sendMessage(
+					chatId,
+					'❌ Invalid percentage. Please enter a number greater than 0.1.',
+				);
+				return true;
+			}
+
+			// Get user
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			// Update order
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), {
+				takeProfitPercent: percentage,
+			});
+
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Take Profit updated!');
+				await showOrderDetail(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
+		// Handle direct amount input
+		if (state.action === 'order_amount_input') {
+			const amount = parseFloat(text);
+			if (isNaN(amount) || amount < 0.001) {
+				await getBot().sendMessage(chatId, '❌ Invalid amount. Minimum is 0.001 BNB.');
+				return true;
+			}
+
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), { tradingAmount: amount });
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Amount updated!');
+				await showOrderDetail(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
+		// Handle direct TP input
+		if (state.action === 'order_tp_input') {
+			const percentage = parseFloat(text);
+			if (isNaN(percentage) || percentage < 0.1) {
+				await getBot().sendMessage(chatId, '❌ Invalid percentage. Minimum is 0.1%.');
+				return true;
+			}
+
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), { takeProfitPercent: percentage });
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Take Profit updated!');
+				await showOrderDetail(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
+		// Handle direct SL input
+		if (state.action === 'order_sl_input') {
+			const percentage = parseFloat(text);
+			if (isNaN(percentage) || percentage < 0.1) {
+				await getBot().sendMessage(chatId, '❌ Invalid percentage. Minimum is 0.1%.');
+				return true;
+			}
+
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), { stopLossPercent: percentage });
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Stop Loss updated!');
+				await showOrderDetail(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
+		// Handle direct gas input
+		if (state.action === 'order_gas_input') {
+			const gasPrice = parseFloat(text);
+			if (isNaN(gasPrice) || gasPrice < 1) {
+				await getBot().sendMessage(chatId, '❌ Invalid gas price. Minimum is 1 Gwei.');
+				return true;
+			}
+
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), { gasFee: { gasPrice: gasPrice.toString() } });
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Gas price updated!');
+				await showOrderDetail(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
+		// Handle direct slippage input
+		if (state.action === 'order_slippage_input') {
+			const slippage = parseFloat(text);
+			if (isNaN(slippage) || slippage < 0.1 || slippage > 100) {
+				await getBot().sendMessage(chatId, '❌ Invalid slippage. Must be between 0.1% and 100%.');
+				return true;
+			}
+
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), { slippage });
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Slippage updated!');
+				await showOrderDetail(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
+		// Handle custom SL input for existing order
+		if (state.action === 'order_sl_custom') {
+			// Parse percentage
+			const percentage = parseFloat(text);
+
+			// Validate
+			if (isNaN(percentage) || percentage < 0.1) {
+				await getBot().sendMessage(
+					chatId,
+					'❌ Invalid percentage. Please enter a number greater than 0.1.',
+				);
+				return true;
+			}
+
+			// Get user
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			// Update order
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), {
+				takeProfitPercent: percentage,
+			});
+
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Take Profit updated!');
+				await showTPSLSettings(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
+		// Handle custom SL input for existing order
+		if (state.action === 'order_sl_custom') {
+			// Parse percentage
+			const percentage = parseFloat(text);
+
+			// Validate
+			if (isNaN(percentage) || percentage < 0.1) {
+				await getBot().sendMessage(
+					chatId,
+					'❌ Invalid percentage. Please enter a number greater than 0.1.',
+				);
+				return true;
+			}
+
+			// Get user
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			// Update order
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), {
+				stopLossPercent: percentage,
+			});
+
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Stop Loss updated!');
+				await showTPSLSettings(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
 		if (state.action === 'manual_buy') {
 			// Validate token address
 			if (!isValidAddress(text)) {
@@ -1574,5 +2107,247 @@ export async function toggleSLEnabled(chatId: string, orderId: string, messageId
 		await showTPSLSettings(chatId, orderId, messageId);
 	} catch (error: any) {
 		logger.error('Failed to toggle SL:', error.message);
+	}
+}
+
+/**
+ * Show Take Profit percentage selection
+ */
+export async function showTPSelection(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '📈 <b>Take Profit Percentage</b>\n\nSelect or enter a custom percentage for taking profits:';
+
+		const keyboard = {
+			inline_keyboard: [
+				[
+					{ text: '10%', callback_data: `order_settp_${orderId}_10` },
+					{ text: '25%', callback_data: `order_settp_${orderId}_25` },
+					{ text: '50%', callback_data: `order_settp_${orderId}_50` },
+				],
+				[
+					{ text: '75%', callback_data: `order_settp_${orderId}_75` },
+					{ text: '100%', callback_data: `order_settp_${orderId}_100` },
+					{ text: '150%', callback_data: `order_settp_${orderId}_150` },
+				],
+				[
+					{ text: '200%', callback_data: `order_settp_${orderId}_200` },
+					{ text: '300%', callback_data: `order_settp_${orderId}_300` },
+					{ text: '500%', callback_data: `order_settp_${orderId}_500` },
+				],
+				[{ text: '✏️ Custom %', callback_data: `order_customtp_${orderId}` }],
+				[{ text: '🛡️ Back', callback_data: `order_tpsl_${orderId}` }],
+			],
+		};
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show TP selection:', error.message);
+	}
+}
+
+/**
+ * Show Stop Loss percentage selection
+ */
+export async function showSLSelection(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '📉 <b>Stop Loss Percentage</b>\n\nSelect or enter a custom percentage for stop losses:';
+
+		const keyboard = {
+			inline_keyboard: [
+				[
+					{ text: '5%', callback_data: `order_setsl_${orderId}_5` },
+					{ text: '10%', callback_data: `order_setsl_${orderId}_10` },
+					{ text: '15%', callback_data: `order_setsl_${orderId}_15` },
+				],
+				[
+					{ text: '20%', callback_data: `order_setsl_${orderId}_20` },
+					{ text: '25%', callback_data: `order_setsl_${orderId}_25` },
+					{ text: '30%', callback_data: `order_setsl_${orderId}_30` },
+				],
+				[
+					{ text: '40%', callback_data: `order_setsl_${orderId}_40` },
+					{ text: '50%', callback_data: `order_setsl_${orderId}_50` },
+					{ text: '75%', callback_data: `order_setsl_${orderId}_75` },
+				],
+				[{ text: '✏️ Custom %', callback_data: `order_customsl_${orderId}` }],
+				[{ text: '🛡️ Back', callback_data: `order_tpsl_${orderId}` }],
+			],
+		};
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show SL selection:', error.message);
+	}
+}
+
+/**
+ * Handle Take Profit percentage set
+ */
+export async function handleSetTP(
+	chatId: string,
+	orderId: string,
+	percentage: number,
+	queryId: string,
+	messageId?: number
+): Promise<void> {
+	try {
+		const user = await User.findOne({ chatId });
+		if (!user) return;
+
+		// Validate percentage
+		if (percentage < 0.1) {
+			await getBot().answerCallbackQuery(queryId, { text: '❌ Invalid percentage!', show_alert: true });
+			return;
+		}
+
+		// Update order
+		const result = await updateOrderConfig(orderId, user._id.toString(), {
+			takeProfitPercent: percentage,
+		});
+
+		if (!result.success) {
+			await getBot().answerCallbackQuery(queryId, { text: `❌ ${result.error}`, show_alert: true });
+			return;
+		}
+
+		await getBot().answerCallbackQuery(queryId, { text: '✅ Take Profit updated!', show_alert: false });
+
+		// Refresh TP/SL settings view
+		await showTPSLSettings(chatId, orderId, messageId);
+	} catch (error: any) {
+		logger.error('Failed to set TP:', error.message);
+	}
+}
+
+/**
+ * Handle Stop Loss percentage set
+ */
+export async function handleSetSL(
+	chatId: string,
+	orderId: string,
+	percentage: number,
+	queryId: string,
+	messageId?: number
+): Promise<void> {
+	try {
+		const user = await User.findOne({ chatId });
+		if (!user) return;
+
+		// Validate percentage
+		if (percentage < 0.1) {
+			await getBot().answerCallbackQuery(queryId, { text: '❌ Invalid percentage!', show_alert: true });
+			return;
+		}
+
+		// Update order
+		const result = await updateOrderConfig(orderId, user._id.toString(), {
+			stopLossPercent: percentage,
+		});
+
+		if (!result.success) {
+			await getBot().answerCallbackQuery(queryId, { text: `❌ ${result.error}`, show_alert: true });
+			return;
+		}
+
+		await getBot().answerCallbackQuery(queryId, { text: '✅ Stop Loss updated!', show_alert: false });
+
+		// Refresh TP/SL settings view
+		await showTPSLSettings(chatId, orderId, messageId);
+	} catch (error: any) {
+		logger.error('Failed to set SL:', error.message);
+	}
+}
+
+/**
+ * Handle custom Take Profit input
+ */
+export async function handleCustomTPInput(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '✏️ <b>Custom Take Profit</b>\n\nEnter your desired take profit percentage:\n\n<i>Example: 250</i>';
+
+		// Set user state
+		userStates.set(chatId, {
+			action: 'order_tp_custom',
+			orderId,
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_tpsl_${orderId}` }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_tpsl_${orderId}` }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show custom TP input:', error.message);
+	}
+}
+
+/**
+ * Handle custom Stop Loss input
+ */
+export async function handleCustomSLInput(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '✏️ <b>Custom Stop Loss</b>\n\nEnter your desired stop loss percentage:\n\n<i>Example: 35</i>';
+
+		// Set user state
+		userStates.set(chatId, {
+			action: 'order_sl_custom',
+			orderId,
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_tpsl_${orderId}` }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_tpsl_${orderId}` }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show custom SL input:', error.message);
 	}
 }

@@ -45,9 +45,20 @@ import {
 	handleOrderSetWallet,
 	showAmountSelection,
 	handleOrderSetAmount,
+	handleAmountInput,
+	handleTPInput,
+	handleSLInput,
+	handleGasInput,
+	handleSlippageInput,
 	showTPSLSettings,
 	toggleTPEnabled,
 	toggleSLEnabled,
+	showTPSelection,
+	showSLSelection,
+	handleSetTP,
+	handleSetSL,
+	handleCustomTPInput,
+	handleCustomSLInput,
 	showGasSettings,
 	handleOrderSetGas,
 	showSlippageSelection,
@@ -381,32 +392,95 @@ function setupCallbackHandlers(): void {
 				await handleOrderSetWallet(chatId, orderId, walletId, query.message?.message_id);
 			} else if (data.startsWith('order_amount_')) {
 				const orderId = data.replace('order_amount_', '');
-				await showAmountSelection(chatId, orderId, query.message?.message_id);
-			} else if (data.startsWith('order_setamount_')) {
-				const parts = data.split('_');
-				const orderId = parts[2];
-				const amount = parseFloat(parts[3]);
-				await handleOrderSetAmount(chatId, orderId, amount, query.message?.message_id);
-			} else if (data.startsWith('order_tpsl_')) {
-				const orderId = data.replace('order_tpsl_', '');
-				await showTPSLSettings(chatId, orderId, query.message?.message_id);
+				// Check if it's label or input
+				if (data.includes('_label_')) {
+					// Do nothing for label click
+					await bot.answerCallbackQuery(query.id);
+				} else if (data.includes('_input_')) {
+					const orderId = data.replace('order_amount_input_', '');
+					await handleAmountInput(chatId, orderId, query.message?.message_id);
+				} else {
+					await showAmountSelection(chatId, orderId, query.message?.message_id);
+				}
+			} else if (data.startsWith('order_tp_')) {
+				// Check if it's input
+				if (data.includes('_input_')) {
+					const orderId = data.replace('order_tp_input_', '');
+					await handleTPInput(chatId, orderId, query.message?.message_id);
+				} else if (data.includes('_disabled_')) {
+					await bot.answerCallbackQuery(query.id, {
+						text: '⚠️ Enable Take Profit first',
+						show_alert: false,
+					});
+				} else {
+					const orderId = data.replace('order_tp_', '');
+					await showTPSelection(chatId, orderId, query.message?.message_id);
+				}
+			} else if (data.startsWith('order_sl_')) {
+				// Check if it's input
+				if (data.includes('_input_')) {
+					const orderId = data.replace('order_sl_input_', '');
+					await handleSLInput(chatId, orderId, query.message?.message_id);
+				} else if (data.includes('_disabled_')) {
+					await bot.answerCallbackQuery(query.id, {
+						text: '⚠️ Enable Stop Loss first',
+						show_alert: false,
+					});
+				} else {
+					const orderId = data.replace('order_sl_', '');
+					await showSLSelection(chatId, orderId, query.message?.message_id);
+				}
+			} else if (data.startsWith('order_gas_')) {
+				const orderId = data.replace('order_gas_', '');
+				// Check if it's label or input
+				if (data.includes('_label_')) {
+					// Do nothing for label click
+					await bot.answerCallbackQuery(query.id);
+				} else if (data.includes('_input_')) {
+					const orderId = data.replace('order_gas_input_', '');
+					await handleGasInput(chatId, orderId, query.message?.message_id);
+				} else {
+					await showGasSettings(chatId, orderId, query.message?.message_id);
+				}
+			} else if (data.startsWith('order_slippage_')) {
+				const orderId = data.replace('order_slippage_', '');
+				// Check if it's label or input
+				if (data.includes('_label_')) {
+					// Do nothing for label click
+					await bot.answerCallbackQuery(query.id);
+				} else if (data.includes('_input_')) {
+					const orderId = data.replace('order_slippage_input_', '');
+					await handleSlippageInput(chatId, orderId, query.message?.message_id);
+				} else {
+					await showSlippageSelection(chatId, orderId, query.message?.message_id);
+				}
 			} else if (data.startsWith('order_tptoggle_')) {
 				const orderId = data.replace('order_tptoggle_', '');
 				await toggleTPEnabled(chatId, orderId, query.message?.message_id);
 			} else if (data.startsWith('order_sltoggle_')) {
 				const orderId = data.replace('order_sltoggle_', '');
 				await toggleSLEnabled(chatId, orderId, query.message?.message_id);
-			} else if (data.startsWith('order_gas_')) {
-				const orderId = data.replace('order_gas_', '');
-				await showGasSettings(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_settp_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const percentage = parseFloat(parts[3]);
+				await handleSetTP(chatId, orderId, percentage, query.id, query.message?.message_id);
+			} else if (data.startsWith('order_setsl_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const percentage = parseFloat(parts[3]);
+				await handleSetSL(chatId, orderId, percentage, query.id, query.message?.message_id);
+			} else if (data.startsWith('order_customtp_')) {
+				const orderId = data.replace('order_customtp_', '');
+				await handleCustomTPInput(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_customsl_')) {
+				const orderId = data.replace('order_customsl_', '');
+				await handleCustomSLInput(chatId, orderId, query.message?.message_id);
 			} else if (data.startsWith('order_setgas_')) {
 				const parts = data.split('_');
 				const orderId = parts[2];
 				const gasPrice = parts[3];
 				await handleOrderSetGas(chatId, orderId, gasPrice, query.message?.message_id);
-			} else if (data.startsWith('order_slippage_')) {
-				const orderId = data.replace('order_slippage_', '');
-				await showSlippageSelection(chatId, orderId, query.message?.message_id);
 			} else if (data.startsWith('order_setslippage_')) {
 				const parts = data.split('_');
 				const orderId = parts[2];

@@ -51,33 +51,31 @@ export function getOrdersListKeyboard(
 export function getOrderDetailKeyboard(orderId: string, isActive: boolean): TelegramBot.InlineKeyboardMarkup {
 	const buttons: TelegramBot.InlineKeyboardButton[][] = [];
 
-	// Status toggle button
 	if (isActive) {
+		// When order is ACTIVE - only show toggle and back buttons
 		buttons.push([{ text: '⏸ Pause Order', callback_data: `order_toggle_${orderId}` }]);
+		buttons.push([{ text: '🛡️ Back to Orders', callback_data: 'orders' }]);
 	} else {
+		// When order is INACTIVE - show all configuration options in Create Order Dialog style
 		buttons.push([{ text: '▶️ Activate Order', callback_data: `order_toggle_${orderId}` }]);
+
+		buttons.push([{ text: '💰 Set Amount', callback_data: `order_amount_${orderId}` }]);
+
+		buttons.push([
+			{ text: '🎯 TP/SL Settings', callback_data: `order_tpsl_${orderId}` },
+			{ text: '⚡ Gas Settings', callback_data: `order_gas_${orderId}` },
+		]);
+
+		buttons.push([
+			{ text: '📊 Slippage', callback_data: `order_slippage_${orderId}` },
+			{ text: '🪙 Manual Buy', callback_data: `order_manual_${orderId}` },
+		]);
+
+		// Danger zone
+		buttons.push([{ text: '🗑 Remove Order', callback_data: `order_remove_${orderId}` }]);
+
+		buttons.push([{ text: '🛡️ Back to Orders', callback_data: 'orders' }]);
 	}
-
-	// Configuration buttons
-	buttons.push([
-		{ text: '💼 Change Wallet', callback_data: `order_wallet_${orderId}` },
-		{ text: '💰 Set Amount', callback_data: `order_amount_${orderId}` },
-	]);
-
-	buttons.push([
-		{ text: '🎯 TP/SL Settings', callback_data: `order_tpsl_${orderId}` },
-		{ text: '⚡ Gas Settings', callback_data: `order_gas_${orderId}` },
-	]);
-
-	buttons.push([
-		{ text: '📊 Slippage', callback_data: `order_slippage_${orderId}` },
-		{ text: '🪙 Manual Buy', callback_data: `order_manual_${orderId}` },
-	]);
-
-	// Danger zone
-	buttons.push([{ text: '🗑 Remove Order', callback_data: `order_remove_${orderId}` }]);
-
-	buttons.push([{ text: '🛡️ Back to Orders', callback_data: 'orders' }]);
 
 	return { inline_keyboard: buttons };
 }
