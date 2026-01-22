@@ -331,10 +331,12 @@ async function showOrderCreateConfig(chatId: string, messageId?: number): Promis
 
 		// Get wallet info if selected
 		let walletInfo = '';
+		let walletName = 'Not selected';
 		if (walletId) {
 			const wallet = await Wallet.findById(walletId);
 			if (wallet) {
 				const balanceBnb = typeof wallet.balance === 'object' ? wallet.balance.bnb : wallet.balance;
+				walletName = `${wallet.name} (${formatBnb(balanceBnb)} BNB)`;
 				walletInfo = `💼 Wallet: <b>${wallet.name}</b>\n📍 <code>${wallet.address}</code>\n💰 Balance: <b>${balanceBnb} BNB</b>\n\n`;
 			}
 		} else {
@@ -361,9 +363,22 @@ ${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
 
 		const keyboard = {
 			inline_keyboard: [
-				[{ text: walletId ? `💼 Change Wallet` : `💼 Select Wallet`, callback_data: 'order_config_wallet' }],
-				[{ text: `💰 Amount: ${config.tradingAmount} BNB`, callback_data: 'order_config_amount' }],
-				[{ text: `📊 Slippage: ${config.slippage}%`, callback_data: 'order_config_slippage' }],
+				// Row 1: Wallet selection
+				[
+					{ text: '💼 Change Wallet', callback_data: 'order_config_wallet' },
+					{ text: walletName, callback_data: 'order_config_wallet' },
+				],
+				// Row 2: Amount
+				[
+					{ text: '💰 Amount', callback_data: 'order_config_amount_label' },
+					{ text: `${config.tradingAmount} BNB`, callback_data: 'order_config_amount' },
+				],
+				// Row 3: Slippage
+				[
+					{ text: '📊 Slippage', callback_data: 'order_config_slippage_label' },
+					{ text: `${config.slippage}%`, callback_data: 'order_config_slippage' },
+				],
+				// Row 4: TP Settings
 				[
 					{
 						text: config.takeProfitEnabled ? '✅ TP Enabled' : '❌ TP Disabled',
@@ -374,6 +389,7 @@ ${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
 						callback_data: config.takeProfitEnabled ? 'order_config_tp' : 'order_config_tp_disabled'
 					},
 				],
+				// Row 5: SL Settings
 				[
 					{
 						text: config.stopLossEnabled ? '✅ SL Enabled' : '❌ SL Disabled',
@@ -384,7 +400,9 @@ ${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
 						callback_data: config.stopLossEnabled ? 'order_config_sl' : 'order_config_sl_disabled'
 					},
 				],
+				// Row 6: Create
 				[{ text: '✅ Create Order', callback_data: 'order_config_create' }],
+				// Row 7: Back
 				[{ text: '🛡️ Back to Orders', callback_data: 'order_config_cancel' }],
 			],
 		};

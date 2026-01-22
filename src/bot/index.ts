@@ -332,6 +332,9 @@ function setupCallbackHandlers(): void {
 				await handleOrderSetConfigWallet(chatId, walletId, query.message?.message_id);
 			} else if (data === 'order_config_amount') {
 				await handleOrderConfigAmount(chatId, query.message?.message_id);
+			} else if (data === 'order_config_amount_label') {
+				// Do nothing for label click
+				await bot.answerCallbackQuery(query.id);
 			} else if (data === 'order_config_amount_custom') {
 				await handleOrderConfigAmountCustom(chatId, query.message?.message_id);
 			} else if (data.startsWith('order_config_amount_')) {
@@ -339,6 +342,9 @@ function setupCallbackHandlers(): void {
 				await handleOrderSetConfigAmount(chatId, amount, query.message?.message_id);
 			} else if (data === 'order_config_slippage') {
 				await handleOrderConfigSlippage(chatId, query.message?.message_id);
+			} else if (data === 'order_config_slippage_label') {
+				// Do nothing for label click
+				await bot.answerCallbackQuery(query.id);
 			} else if (data.startsWith('order_config_slippage_')) {
 				const slippage = parseInt(data.replace('order_config_slippage_', ''));
 				await handleOrderSetConfigSlippage(chatId, slippage, query.message?.message_id);
