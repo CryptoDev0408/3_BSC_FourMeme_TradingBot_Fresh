@@ -41,6 +41,7 @@ import {
 	handleOrderConfigCancel,
 	handleOrderConfigCreate,
 	handleOrderToggle,
+	handleAutoBuyToggle,
 	handleOrderWalletSelection,
 	handleOrderSetWallet,
 	showAmountSelection,
@@ -388,6 +389,9 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('order_toggle_')) {
 				const orderId = data.replace('order_toggle_', '');
 				await handleOrderToggle(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_autobuy_toggle_')) {
+				const orderId = data.replace('order_autobuy_toggle_', '');
+				await handleAutoBuyToggle(chatId, orderId, query.message?.message_id);
 			} else if (data.startsWith('order_wallet_')) {
 				const orderId = data.replace('order_wallet_', '');
 				await handleOrderWalletSelection(chatId, orderId, query.message?.message_id);

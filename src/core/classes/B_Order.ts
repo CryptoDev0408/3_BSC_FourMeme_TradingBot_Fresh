@@ -13,6 +13,7 @@ export class B_Order {
 	public walletId: string;
 	public name: string;
 	public isActive: boolean;
+	public autoBuy: boolean;
 	public tradingAmount: number;
 	public slippage: number;
 	public takeProfitPercent: number;
@@ -33,6 +34,7 @@ export class B_Order {
 		this.walletId = order.walletId.toString();
 		this.name = order.name;
 		this.isActive = order.isActive;
+		this.autoBuy = order.autoBuy;
 		this.tradingAmount = order.tradingAmount;
 		this.slippage = order.slippage;
 		this.takeProfitPercent = order.takeProfitPercent;
@@ -203,6 +205,23 @@ export class B_Order {
 	async pause(): Promise<boolean> {
 		if (!this.isActive) return true;
 		return await this.toggleStatus();
+	}
+
+	/**
+	 * Toggle autoBuy status
+	 */
+	async toggleAutoBuy(): Promise<boolean> {
+		try {
+			const newStatus = !this.autoBuy;
+			await Order.findByIdAndUpdate(this.id, { autoBuy: newStatus });
+			this.autoBuy = newStatus;
+
+			logger.info(`Order ${this.name} autoBuy ${newStatus ? 'enabled' : 'disabled'}`);
+			return true;
+		} catch (error: any) {
+			logger.error('Failed to toggle autoBuy status:', error.message);
+			return false;
+		}
 	}
 
 	/**

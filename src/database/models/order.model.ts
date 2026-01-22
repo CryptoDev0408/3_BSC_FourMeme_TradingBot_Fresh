@@ -8,6 +8,7 @@ export interface IOrder extends Document {
 	walletId: mongoose.Types.ObjectId;
 	name: string;
 	isActive: boolean;
+	autoBuy: boolean;
 	tradingAmount: number;
 	takeProfitPercent: number;
 	takeProfitEnabled: boolean;
@@ -46,6 +47,10 @@ const OrderSchema = new Schema<IOrder>(
 			default: 'Order',
 		},
 		isActive: {
+			type: Boolean,
+			default: false,
+		},
+		autoBuy: {
 			type: Boolean,
 			default: false,
 		},

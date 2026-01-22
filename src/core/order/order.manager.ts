@@ -120,6 +120,7 @@ export async function updateOrderConfig(
 		stopLossPercent?: number;
 		stopLossEnabled?: boolean;
 		slippage?: number;
+		autoBuy?: boolean;
 		gasFee?: {
 			gasPrice?: string;
 			gasLimit?: number;
@@ -149,6 +150,7 @@ export async function updateOrderConfig(
 		if (config.stopLossPercent !== undefined) order.stopLossPercent = config.stopLossPercent;
 		if (config.stopLossEnabled !== undefined) order.stopLossEnabled = config.stopLossEnabled;
 		if (config.slippage !== undefined) order.slippage = config.slippage;
+		if (config.autoBuy !== undefined) order.autoBuy = config.autoBuy;
 		if (config.gasFee?.gasPrice !== undefined) order.gasFee.gasPrice = config.gasFee.gasPrice;
 		if (config.gasFee?.gasLimit !== undefined) order.gasFee.gasLimit = config.gasFee.gasLimit;
 

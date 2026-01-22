@@ -242,16 +242,26 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 					{ text: '📊 Slippage', callback_data: `order_slippage_label_${orderId}` },
 					{ text: `${order.slippage}%`, callback_data: `order_slippage_input_${orderId}` },
 				],
-				// Row 7: Manual Buy & Remove
+				// Row 7: Auto Buy Toggle
 				[
-					{ text: '🪙 Manual Buy', callback_data: `order_manual_${orderId}` },
+					{
+						text: order.autoBuy ? '✅ AutoBuy: ON' : '❌ AutoBuy: OFF',
+						callback_data: `order_autobuy_toggle_${orderId}`
+					},
+					...(order.autoBuy ? [] : [{ text: '🪙 Manual Buy', callback_data: `order_manual_${orderId}` }])
+				],
+				// Row 8: Back & Remove
+				[
+					{ text: '🛡️ Back to Orders', callback_data: 'orders' },
 					{ text: '🗑 Remove Order', callback_data: `order_remove_${orderId}` },
 				]
 			);
 		}
 
-		// Always show Back button at the end
-		keyboard.inline_keyboard.push([{ text: '🛡️ Back to Orders', callback_data: 'orders' }]);
+		// For active orders, still show Back button at the end
+		if (order.isActive) {
+			keyboard.inline_keyboard.push([{ text: '🛡️ Back to Orders', callback_data: 'orders' }]);
+		}
 
 		if (messageId) {
 			await getBot().editMessageText(text, {
@@ -1042,6 +1052,53 @@ export async function handleOrderToggle(chatId: string, orderId: string, message
 	} catch (error: any) {
 		logger.error('Failed to toggle order:', error.message);
 		await getBot().sendMessage(chatId, '❌ Failed to toggle order status. Please try again.');
+	}
+}
+
+/**
+ * Handle autoBuy toggle
+ */
+export async function handleAutoBuyToggle(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		// Get user
+		const user = await User.findOne({ chatId });
+		if (!user) return;
+
+		// Get order
+		const order = await getOrderById(orderId, user._id.toString());
+		if (!order) {
+			await getBot().sendMessage(chatId, '❌ Order not found.');
+			return;
+		}
+
+		// Toggle autoBuy
+		const newAutoBuyStatus = !order.autoBuy;
+		await updateOrderConfig(orderId, user._id.toString(), { autoBuy: newAutoBuyStatus });
+
+		// Show success message
+		const status = newAutoBuyStatus ? '✅ ON' : '❌ OFF';
+		const action = newAutoBuyStatus ? 'enabled' : 'disabled';
+
+		// Delete old message and send new one
+		if (messageId) {
+			try {
+				await getBot().deleteMessage(chatId, messageId);
+			} catch (error) {
+				// Ignore delete errors
+			}
+		}
+
+		await getBot().sendMessage(
+			chatId,
+			`✅ AutoBuy ${action} successfully!\n\nAutoBuy Status: ${status}`,
+			{ parse_mode: 'HTML' }
+		);
+
+		// Show refreshed order view
+		await showOrderDetail(chatId, orderId);
+	} catch (error: any) {
+		logger.error('Failed to toggle autoBuy:', error.message);
+		await getBot().sendMessage(chatId, '❌ Failed to toggle autoBuy. Please try again.');
 	}
 }
 
