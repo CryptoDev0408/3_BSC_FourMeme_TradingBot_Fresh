@@ -6,6 +6,7 @@ import mongoose, { Document, Schema, Model } from 'mongoose';
 export interface IOrder extends Document {
 	userId: mongoose.Types.ObjectId;
 	walletId: mongoose.Types.ObjectId;
+	name: string;
 	isActive: boolean;
 	tradingAmount: number;
 	takeProfitPercent: number;
@@ -16,6 +17,7 @@ export interface IOrder extends Document {
 		gasPrice: string;
 		gasLimit: number;
 	};
+	slippage: number;
 	manualTokenAddress?: string;
 	createdAt: Date;
 	updatedAt: Date;
@@ -37,6 +39,11 @@ const OrderSchema = new Schema<IOrder>(
 			ref: 'Wallet',
 			required: true,
 			index: true,
+		},
+		name: {
+			type: String,
+			required: true,
+			default: 'Order',
 		},
 		isActive: {
 			type: Boolean,
@@ -78,6 +85,12 @@ const OrderSchema = new Schema<IOrder>(
 				default: 300000,
 			},
 		},
+		slippage: {
+			type: Number,
+			min: 0.1,
+			max: 50,
+			default: 10,
+		},
 		manualTokenAddress: {
 			type: String,
 			default: null,
@@ -91,7 +104,6 @@ const OrderSchema = new Schema<IOrder>(
 );
 
 // Compound indexes for performance
-OrderSchema.index({ userId: 1, walletId: 1 }, { unique: true });
 OrderSchema.index({ userId: 1, isActive: 1 });
 OrderSchema.index({ walletId: 1, isActive: 1 });
 

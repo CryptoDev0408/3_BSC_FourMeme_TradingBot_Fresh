@@ -19,15 +19,14 @@ export function getWalletListKeyboard(
 	const end = start + walletsPerPage;
 	const paginatedWallets = wallets.slice(start, end);
 
-	// Wallet buttons
+	// Wallet buttons - show all wallet info
 	paginatedWallets.forEach((wallet) => {
-		const status = wallet.isActive ? '✅' : '⚪️';
 		const balance = wallet.balance.bnb.toFixed(4);
 		const shortAddr = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
 
 		buttons.push([
 			{
-				text: `${status} ${wallet.name} (${shortAddr}) - ${balance} BNB`,
+				text: `👛 ${wallet.name} | ${shortAddr} | ${balance} BNB`,
 				callback_data: `wallet_view_${wallet._id}`,
 			},
 		]);
@@ -47,7 +46,7 @@ export function getWalletListKeyboard(
 
 	// Action buttons
 	buttons.push([
-		{ text: '➕ Generate Wallet', callback_data: 'wallet_generate' },
+		{ text: '⭐ Generate Wallet', callback_data: 'wallet_generate' },
 		{ text: '📥 Import Wallet', callback_data: 'wallet_import' },
 	]);
 
@@ -63,23 +62,17 @@ export function getWalletDetailKeyboard(walletId: string, isActive: boolean): Te
 	const buttons: TelegramBot.InlineKeyboardButton[][] = [
 		[
 			{ text: '🔄 Refresh Balance', callback_data: `wallet_refresh_${walletId}` },
+			{ text: '✏️ Rename Wallet', callback_data: `wallet_rename_${walletId}` },
 		],
+		[
+			{ text: '💸 Withdraw BNB', callback_data: `wallet_withdraw_${walletId}` },
+			{ text: '🗑 Remove Wallet', callback_data: `wallet_remove_${walletId}` },
+		],
+		[
+			{ text: '🔑 Show Private Key', callback_data: `wallet_showkey_${walletId}` },
+		],
+		[{ text: '⬅️ Back to Wallets', callback_data: 'wallets' }],
 	];
-
-	if (!isActive) {
-		buttons.push([{ text: '✅ Set as Active', callback_data: `wallet_activate_${walletId}` }]);
-	}
-
-	buttons.push([
-		{ text: '💸 Withdraw BNB', callback_data: `wallet_withdraw_${walletId}` },
-		{ text: '🗑 Remove Wallet', callback_data: `wallet_remove_${walletId}` },
-	]);
-
-	buttons.push([
-		{ text: '🔑 Show Private Key', callback_data: `wallet_showkey_${walletId}` },
-	]);
-
-	buttons.push([{ text: '⬅️ Back to Wallets', callback_data: 'wallets' }]);
 
 	return { inline_keyboard: buttons };
 }

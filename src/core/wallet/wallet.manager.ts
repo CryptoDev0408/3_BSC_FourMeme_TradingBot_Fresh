@@ -165,20 +165,22 @@ export async function removeWallet(
 		// Check if it's the active wallet
 		const user = await User.findById(userId);
 		if (user && user.activeWalletId?.toString() === walletId) {
-			// Find another wallet to set as active
+			// Find another active wallet to set as active
 			const otherWallet = await Wallet.findOne({
 				userId: new mongoose.Types.ObjectId(userId),
 				_id: { $ne: walletId },
+				isActive: true,
 			});
 
 			user.activeWalletId = otherWallet?._id as mongoose.Types.ObjectId || undefined;
 			await user.save();
 		}
 
-		// Delete wallet
-		await Wallet.deleteOne({ _id: walletId });
+		// Soft delete: set isActive to false instead of deleting
+		wallet.isActive = false;
+		await wallet.save();
 
-		logger.success(`Wallet removed: ${wallet.address}`);
+		logger.success(`Wallet deactivated: ${wallet.address}`);
 
 		return { success: true };
 	} catch (error: any) {
@@ -196,6 +198,7 @@ export async function getUserWallets(userId: string): Promise<IWallet[]> {
 	try {
 		const wallets = await Wallet.find({
 			userId: new mongoose.Types.ObjectId(userId),
+			isActive: true, // Only show active wallets
 		}).sort({ createdAt: -1 });
 
 		return wallets;

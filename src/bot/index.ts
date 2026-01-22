@@ -13,11 +13,37 @@ import {
 	confirmWalletRemove,
 	showPrivateKey,
 	handleWalletActivate,
+	handleWalletRename,
 	handleWithdrawInitiate,
 	handleWithdrawPercent,
 	handleWalletTextMessage,
 	clearWalletState,
+	setBotInstance as setWalletBotInstance,
 } from './handlers/wallet.handler';
+import {
+	showOrdersList,
+	showOrderDetail,
+	handleOrderCreate,
+	confirmOrderCreate,
+	handleOrderToggle,
+	handleOrderWalletSelection,
+	handleOrderSetWallet,
+	showAmountSelection,
+	handleOrderSetAmount,
+	showTPSLSettings,
+	toggleTPEnabled,
+	toggleSLEnabled,
+	showGasSettings,
+	handleOrderSetGas,
+	showSlippageSelection,
+	handleOrderSetSlippage,
+	handleOrderRemove,
+	confirmOrderRemove,
+	handleManualBuy,
+	handleOrderTextMessage,
+	clearOrderState,
+	setBotInstance as setOrderBotInstance,
+} from './handlers/order.handler';
 
 /**
  * Telegram Bot Instance
@@ -35,10 +61,14 @@ export async function initializeBot(): Promise<void> {
 			polling: true,
 		});
 
+		// Initialize bot instance in handlers to avoid circular dependency
+		setWalletBotInstance(bot);
+		setOrderBotInstance(bot);
+
 		// Setup handlers
 		setupCommandHandlers();
 		setupMessageHandlers();
-		setupCallbackHandlers(); // <-- THIS WAS MISSING!
+		setupCallbackHandlers();
 		setupErrorHandlers();
 
 		logger.success('✅ Telegram Bot initialized successfully');
@@ -171,8 +201,14 @@ function setupMessageHandlers(): void {
 
 		try {
 			// Try wallet handler first
-			const handled = await handleWalletTextMessage(msg);
-			if (handled) {
+			const walletHandled = await handleWalletTextMessage(msg);
+			if (walletHandled) {
+				return;
+			}
+
+			// Try order handler
+			const orderHandled = await handleOrderTextMessage(msg);
+			if (orderHandled) {
 				return;
 			}
 
@@ -203,6 +239,7 @@ function setupCallbackHandlers(): void {
 			if (data === 'main_menu') {
 				console.log('[BOT] Routing to main_menu');
 				clearWalletState(chatId);
+				clearOrderState(chatId);
 				await bot.sendPhoto(
 					chatId,
 					'https://ipfs.io/ipfs/bafkreiebl7hx5sieh6obulfjpl76dl7zq5cgfp62n4tk3rnyjclvipcbby',
@@ -239,6 +276,9 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('wallet_activate_')) {
 				const walletId = data.replace('wallet_activate_', '');
 				await handleWalletActivate(chatId, walletId, query.message?.message_id);
+			} else if (data.startsWith('wallet_rename_')) {
+				const walletId = data.replace('wallet_rename_', '');
+				await handleWalletRename(chatId, walletId, query.message?.message_id);
 			} else if (data.startsWith('wallet_refresh_')) {
 				const walletId = data.replace('wallet_refresh_', '');
 				await showWalletDetail(chatId, walletId, query.message?.message_id);
@@ -253,15 +293,70 @@ function setupCallbackHandlers(): void {
 					await handleWithdrawInitiate(chatId, walletId, query.message?.message_id);
 				}
 			} else if (data === 'orders') {
-				if (query.message?.message_id) {
-					await bot.deleteMessage(chatId, query.message.message_id);
+				console.log('[BOT] Routing to orders handler');
+				await showOrdersList(chatId, query.message?.message_id);
+			} else if (data === 'order_create') {
+				await handleOrderCreate(chatId, query.message?.message_id);
+			} else if (data === 'order_create_confirm') {
+				await confirmOrderCreate(chatId, query.message?.message_id);
+			} else if (data.startsWith('order_view_')) {
+				const orderId = data.replace('order_view_', '');
+				await showOrderDetail(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_toggle_')) {
+				const orderId = data.replace('order_toggle_', '');
+				await handleOrderToggle(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_wallet_')) {
+				const orderId = data.replace('order_wallet_', '');
+				await handleOrderWalletSelection(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_setwallet_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const walletId = parts[3];
+				await handleOrderSetWallet(chatId, orderId, walletId, query.message?.message_id);
+			} else if (data.startsWith('order_amount_')) {
+				const orderId = data.replace('order_amount_', '');
+				await showAmountSelection(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_setamount_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const amount = parseFloat(parts[3]);
+				await handleOrderSetAmount(chatId, orderId, amount, query.message?.message_id);
+			} else if (data.startsWith('order_tpsl_')) {
+				const orderId = data.replace('order_tpsl_', '');
+				await showTPSLSettings(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_tptoggle_')) {
+				const orderId = data.replace('order_tptoggle_', '');
+				await toggleTPEnabled(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_sltoggle_')) {
+				const orderId = data.replace('order_sltoggle_', '');
+				await toggleSLEnabled(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_gas_')) {
+				const orderId = data.replace('order_gas_', '');
+				await showGasSettings(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_setgas_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const gasPrice = parts[3];
+				await handleOrderSetGas(chatId, orderId, gasPrice, query.message?.message_id);
+			} else if (data.startsWith('order_slippage_')) {
+				const orderId = data.replace('order_slippage_', '');
+				await showSlippageSelection(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_setslippage_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const slippage = parseFloat(parts[3]);
+				await handleOrderSetSlippage(chatId, orderId, slippage, query.message?.message_id);
+			} else if (data.startsWith('order_manual_')) {
+				const orderId = data.replace('order_manual_', '');
+				await handleManualBuy(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_remove_')) {
+				if (data.startsWith('order_remove_confirm_')) {
+					const orderId = data.replace('order_remove_confirm_', '');
+					await confirmOrderRemove(chatId, orderId, query.message?.message_id);
+				} else {
+					const orderId = data.replace('order_remove_', '');
+					await handleOrderRemove(chatId, orderId, query.message?.message_id);
 				}
-				await bot.sendMessage(chatId, '📊 <b>Order Management</b>\n\n⏳ Coming soon in next steps...', {
-					parse_mode: 'HTML',
-					reply_markup: {
-						inline_keyboard: [[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]],
-					},
-				});
 			} else if (data === 'positions') {
 				if (query.message?.message_id) {
 					await bot.deleteMessage(chatId, query.message.message_id);

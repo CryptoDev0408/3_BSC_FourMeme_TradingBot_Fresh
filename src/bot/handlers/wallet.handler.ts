@@ -1,5 +1,4 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { bot } from '../index';
 import { logger } from '../../utils/logger';
 import { formatBnb, formatTimeAgo } from '../../utils/formatter';
 import {
@@ -24,6 +23,20 @@ import {
 } from '../keyboards/wallet.keyboard';
 import { WALLETS_PER_PAGE } from '../../config/constants';
 import { User } from '../../database/models';
+
+/**
+ * Bot instance getter - resolves circular dependency
+ */
+let botInstance: TelegramBot;
+export function setBotInstance(bot: TelegramBot): void {
+	botInstance = bot;
+}
+function getBot(): TelegramBot {
+	if (!botInstance) {
+		throw new Error('Bot instance not initialized');
+	}
+	return botInstance;
+}
 
 /**
  * Wallet Handler
@@ -68,7 +81,7 @@ export async function showWalletsList(chatId: string, messageId?: number, page: 
 
 		if (!userId) {
 			console.log('[WALLET] User not found, sending error message');
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
@@ -83,8 +96,6 @@ export async function showWalletsList(chatId: string, messageId?: number, page: 
 			text += 'Click "➕ Generate Wallet" to create a new wallet or "📥 Import Wallet" to import an existing one.';
 		} else {
 			text += `📊 Total Wallets: <b>${wallets.length}</b>\n\n`;
-			text += '✅ = Active Wallet\n';
-			text += '⚪️ = Inactive Wallet\n\n';
 			text += '<i>Click on a wallet to view details</i>';
 		}
 
@@ -105,14 +116,14 @@ export async function showWalletsList(chatId: string, messageId?: number, page: 
 		if (messageId) {
 			console.log('[WALLET] Deleting previous message:', messageId);
 			try {
-				await bot.deleteMessage(chatId, messageId);
+				await getBot().deleteMessage(chatId, messageId);
 			} catch (deleteError) {
 				console.log('[WALLET] Could not delete message, continuing...');
 			}
 		}
 
 		console.log('[WALLET] Sending new message');
-		await bot.sendMessage(chatId, text, {
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 			reply_markup: keyboard,
 		});
@@ -120,7 +131,7 @@ export async function showWalletsList(chatId: string, messageId?: number, page: 
 	} catch (error: any) {
 		console.error('[WALLET] Error showing wallets list:', error);
 		logger.error('Error showing wallets list:', error.message);
-		await bot.sendMessage(chatId, '❌ Failed to load wallets. Please try again.');
+		await getBot().sendMessage(chatId, '❌ Failed to load wallets. Please try again.');
 	}
 }
 
@@ -135,7 +146,7 @@ export async function showWalletDetail(
 	try {
 		const userId = await getUserId(chatId);
 		if (!userId) {
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
@@ -143,7 +154,7 @@ export async function showWalletDetail(
 		const wallet = wallets.find((w) => w._id.toString() === walletId);
 
 		if (!wallet) {
-			await bot.sendMessage(chatId, '❌ Wallet not found.');
+			await getBot().sendMessage(chatId, '❌ Wallet not found.');
 			return;
 		}
 
@@ -157,7 +168,6 @@ export async function showWalletDetail(
 💼 <b>Wallet Details</b>
 
 📝 Name: <b>${wallet.name}</b>
-${wallet.isActive ? '✅ <b>Active Wallet</b>' : '⚪️ Inactive'}
 
 📍 Address:
 <code>${wallet.address}</code>
@@ -174,19 +184,19 @@ ${wallet.isActive ? '✅ <b>Active Wallet</b>' : '⚪️ Inactive'}
 
 		if (messageId) {
 			try {
-				await bot.deleteMessage(chatId, messageId);
+				await getBot().deleteMessage(chatId, messageId);
 			} catch (deleteError) {
 				// Ignore delete errors
 			}
 		}
 
-		await bot.sendMessage(chatId, text, {
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 			reply_markup: keyboard,
 		});
 	} catch (error: any) {
 		logger.error('Error showing wallet detail:', error.message);
-		await bot.sendMessage(chatId, '❌ Failed to load wallet details.');
+		await getBot().sendMessage(chatId, '❌ Failed to load wallet details.');
 	}
 }
 
@@ -198,7 +208,7 @@ export async function handleWalletGenerate(chatId: string, messageId?: number): 
 		// Delete previous message if exists
 		if (messageId) {
 			try {
-				await bot.deleteMessage(chatId, messageId);
+				await getBot().deleteMessage(chatId, messageId);
 			} catch (e) {
 				// Ignore delete errors
 			}
@@ -207,7 +217,7 @@ export async function handleWalletGenerate(chatId: string, messageId?: number): 
 		// Get user ID
 		const userId = await getUserId(chatId);
 		if (!userId) {
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
@@ -215,7 +225,7 @@ export async function handleWalletGenerate(chatId: string, messageId?: number): 
 		const result = await generateWallet(userId);
 
 		if (!result.success || !result.wallet) {
-			await bot.sendMessage(chatId, `❌ Failed to generate wallet: ${result.error || 'Unknown error'}`);
+			await getBot().sendMessage(chatId, `❌ Failed to generate wallet: ${result.error || 'Unknown error'}`);
 			return;
 		}
 
@@ -234,7 +244,7 @@ ${wallet.isActive ? '✅ Set as active wallet' : ''}
 Use "🔑 Show Private Key" from wallet details to view it.
         `.trim();
 
-		await bot.sendMessage(chatId, text, {
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 		});
 
@@ -242,7 +252,7 @@ Use "🔑 Show Private Key" from wallet details to view it.
 		await showWalletsList(chatId);
 	} catch (error: any) {
 		logger.error('Error in wallet generate:', error.message);
-		await bot.sendMessage(chatId, '❌ Failed to generate wallet. Please try again.');
+		await getBot().sendMessage(chatId, '❌ Failed to generate wallet. Please try again.');
 	}
 }
 
@@ -280,13 +290,13 @@ Example:
 
 		if (messageId) {
 			try {
-				await bot.deleteMessage(chatId, messageId);
+				await getBot().deleteMessage(chatId, messageId);
 			} catch (e) {
 				// Ignore delete errors
 			}
 		}
 
-		await bot.sendMessage(chatId, text, {
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 			reply_markup: {
 				inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'wallets' }]],
@@ -304,7 +314,7 @@ export async function processPrivateKeyImport(chatId: string, privateKey: string
 	try {
 		// Delete the message with private key for security
 		try {
-			await bot.deleteMessage(chatId, msgId);
+			await getBot().deleteMessage(chatId, msgId);
 		} catch (e) {
 			// Ignore if can't delete
 		}
@@ -313,13 +323,13 @@ export async function processPrivateKeyImport(chatId: string, privateKey: string
 		userStates.delete(chatId);
 
 		// Send processing message
-		const processingMsg = await bot.sendMessage(chatId, '⏳ Importing wallet...');
+		const processingMsg = await getBot().sendMessage(chatId, '⏳ Importing wallet...');
 
 		// Get user ID
 		const userId = await getUserId(chatId);
 		if (!userId) {
-			await bot.deleteMessage(chatId, processingMsg.message_id);
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().deleteMessage(chatId, processingMsg.message_id);
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
@@ -327,10 +337,10 @@ export async function processPrivateKeyImport(chatId: string, privateKey: string
 		const result = await importWallet(userId, privateKey.trim());
 
 		// Delete processing message
-		await bot.deleteMessage(chatId, processingMsg.message_id);
+		await getBot().deleteMessage(chatId, processingMsg.message_id);
 
 		if (!result.success || !result.wallet) {
-			await bot.sendMessage(chatId, `❌ Failed to import wallet: ${result.error || 'Unknown error'}`);
+			await getBot().sendMessage(chatId, `❌ Failed to import wallet: ${result.error || 'Unknown error'}`);
 			return;
 		}
 
@@ -349,7 +359,7 @@ ${wallet.isActive ? '✅ Set as active wallet' : ''}
 Your private key is encrypted and stored securely.
         `.trim();
 
-		await bot.sendMessage(chatId, text, {
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 		});
 
@@ -357,7 +367,7 @@ Your private key is encrypted and stored securely.
 		await showWalletsList(chatId);
 	} catch (error: any) {
 		logger.error('Error processing private key import:', error.message);
-		await bot.sendMessage(chatId, '❌ Failed to import wallet. Please check the private key and try again.');
+		await getBot().sendMessage(chatId, '❌ Failed to import wallet. Please check the private key and try again.');
 	}
 }
 
@@ -389,13 +399,13 @@ Do you want to proceed?
 
 		if (messageId) {
 			try {
-				await bot.deleteMessage(chatId, messageId);
+				await getBot().deleteMessage(chatId, messageId);
 			} catch (e) {
 				// Ignore delete errors
 			}
 		}
 
-		await bot.sendMessage(chatId, text, {
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 			reply_markup: keyboard,
 		});
@@ -415,7 +425,7 @@ export async function confirmWalletRemove(
 	try {
 		if (messageId) {
 			try {
-				await bot.deleteMessage(chatId, messageId);
+				await getBot().deleteMessage(chatId, messageId);
 			} catch (e) {
 				// Ignore delete errors
 			}
@@ -423,24 +433,24 @@ export async function confirmWalletRemove(
 
 		const userId = await getUserId(chatId);
 		if (!userId) {
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
 		const result = await removeWallet(walletId, userId);
 
 		if (!result.success) {
-			await bot.sendMessage(chatId, `❌ Failed to remove wallet: ${result.error || 'Unknown error'}`);
+			await getBot().sendMessage(chatId, `❌ Failed to remove wallet: ${result.error || 'Unknown error'}`);
 			return;
 		}
 
-		await bot.sendMessage(chatId, '✅ Wallet removed successfully!');
+		await getBot().sendMessage(chatId, '✅ Wallet removed successfully!');
 
 		// Show wallets list
 		await showWalletsList(chatId);
 	} catch (error: any) {
 		logger.error('Error confirming wallet removal:', error.message);
-		await bot.sendMessage(chatId, '❌ Failed to remove wallet.');
+		await getBot().sendMessage(chatId, '❌ Failed to remove wallet.');
 	}
 }
 
@@ -451,14 +461,14 @@ export async function showPrivateKey(chatId: string, walletId: string): Promise<
 	try {
 		const userId = await getUserId(chatId);
 		if (!userId) {
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
 		const result = await getWalletWithPrivateKey(walletId, userId);
 
 		if (!result.success || !result.wallet || !result.privateKey) {
-			await bot.sendMessage(chatId, `❌ Failed to retrieve private key: ${result.error || 'Unknown error'}`);
+			await getBot().sendMessage(chatId, `❌ Failed to retrieve private key: ${result.error || 'Unknown error'}`);
 			return;
 		}
 
@@ -477,21 +487,21 @@ export async function showPrivateKey(chatId: string, walletId: string): Promise<
 <i>This message will be automatically deleted in 60 seconds</i>
         `.trim();
 
-		const msg = await bot.sendMessage(chatId, text, {
+		const msg = await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 		});
 
 		// Auto-delete after 60 seconds
 		setTimeout(async () => {
 			try {
-				await bot.deleteMessage(chatId, msg.message_id);
+				await getBot().deleteMessage(chatId, msg.message_id);
 			} catch (e) {
 				// Ignore if already deleted
 			}
 		}, 60000);
 	} catch (error: any) {
 		logger.error('Error showing private key:', error.message);
-		await bot.sendMessage(chatId, '❌ Failed to retrieve private key.');
+		await getBot().sendMessage(chatId, '❌ Failed to retrieve private key.');
 	}
 }
 
@@ -512,16 +522,142 @@ export async function handleWalletActivate(
 		const result = await setActiveWallet(userId, walletId);
 
 		if (!result.success) {
-			await bot.sendMessage(chatId, `❌ Failed to activate wallet: ${result.error || 'Unknown error'}`);
+			await getBot().sendMessage(chatId, `❌ Failed to activate wallet: ${result.error || 'Unknown error'}`);
 			return;
 		}
 
-		await bot.answerCallbackQuery(chatId, { text: '✅ Wallet activated!' });
+		await getBot().answerCallbackQuery(chatId, { text: '✅ Wallet activated!' });
 
 		// Refresh wallet detail
 		await showWalletDetail(chatId, walletId, messageId);
 	} catch (error: any) {
 		logger.error('Error activating wallet:', error.message);
+	}
+}
+
+/**
+ * Handle rename wallet initiation
+ */
+export async function handleWalletRename(
+	chatId: string,
+	walletId: string,
+	messageId?: number
+): Promise<void> {
+	try {
+		const userId = await getUserId(chatId);
+		if (!userId) {
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
+			return;
+		}
+
+		const wallets = await getUserWallets(userId);
+		const wallet = wallets.find((w) => w._id.toString() === walletId);
+
+		if (!wallet) {
+			await getBot().sendMessage(chatId, '❌ Wallet not found.');
+			return;
+		}
+
+		// Delete previous message
+		if (messageId) {
+			try {
+				await getBot().deleteMessage(chatId, messageId);
+			} catch (e) {
+				// Ignore delete errors
+			}
+		}
+
+		// Store state for name input
+		userStates.set(chatId, {
+			action: 'rename_wallet',
+			data: { walletId },
+			messageId,
+		});
+
+		const text = `
+✏️ <b>Rename Wallet</b>
+
+Current Name: <b>${wallet.name}</b>
+
+Send the new name for this wallet:
+
+Example:
+<code>Main Trading Wallet</code>
+
+<i>Send the new name now or click Cancel</i>
+        `.trim();
+
+		await getBot().sendMessage(chatId, text, {
+			parse_mode: 'HTML',
+			reply_markup: {
+				inline_keyboard: [[{ text: '❌ Cancel', callback_data: `wallet_view_${walletId}` }]],
+			},
+		});
+	} catch (error: any) {
+		logger.error('Error in wallet rename:', error.message);
+	}
+}
+
+/**
+ * Process wallet rename
+ */
+async function processWalletRename(
+	chatId: string,
+	newName: string,
+	msgId: number
+): Promise<void> {
+	try {
+		const state = userStates.get(chatId);
+		if (!state || !state.data?.walletId) {
+			return;
+		}
+
+		const walletId = state.data.walletId;
+		const userId = await getUserId(chatId);
+		if (!userId) return;
+
+		// Validate name
+		if (!newName || newName.length < 1 || newName.length > 50) {
+			await getBot().sendMessage(chatId, '❌ Wallet name must be 1-50 characters long. Please try again.');
+			return;
+		}
+
+		// Delete user's message
+		try {
+			await getBot().deleteMessage(chatId, msgId);
+		} catch { }
+
+		// Show processing message
+		const processingMsg = await getBot().sendMessage(chatId, '⏳ Renaming wallet...');
+
+		// Update wallet name in database
+		const { Wallet } = await import('../../database/models');
+		const result = await Wallet.findOneAndUpdate(
+			{ _id: walletId, userId },
+			{ name: newName },
+			{ new: true }
+		);
+
+		// Clear state
+		userStates.delete(chatId);
+
+		// Delete processing message
+		await getBot().deleteMessage(chatId, processingMsg.message_id);
+
+		if (!result) {
+			await getBot().sendMessage(chatId, '❌ Failed to rename wallet.');
+			return;
+		}
+
+		await getBot().sendMessage(chatId, `✅ Wallet renamed to: <b>${newName}</b>`, {
+			parse_mode: 'HTML',
+		});
+
+		// Show wallet detail
+		await showWalletDetail(chatId, walletId);
+	} catch (error: any) {
+		logger.error('Error processing wallet rename:', error.message);
+		await getBot().sendMessage(chatId, '❌ Failed to rename wallet.');
 	}
 }
 
@@ -536,7 +672,7 @@ export async function handleWithdrawInitiate(
 	try {
 		const userId = await getUserId(chatId);
 		if (!userId) {
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
@@ -544,34 +680,47 @@ export async function handleWithdrawInitiate(
 		const wallet = wallets.find((w) => w._id.toString() === walletId);
 
 		if (!wallet) {
-			await bot.sendMessage(chatId, '❌ Wallet not found.');
+			await getBot().sendMessage(chatId, '❌ Wallet not found.');
 			return;
 		}
 
 		const balanceResult = await getBnbBalance(wallet.address);
 		const balance = balanceResult.success && balanceResult.balance !== undefined ? balanceResult.balance : 0;
 
-		const text = `
-💸 <b>Withdraw BNB</b>
-
-Current Balance: <b>${formatBnb(balance)} BNB</b>
-
-Select amount to withdraw or enter custom amount:
-        `.trim();
-
-		const keyboard = getWithdrawAmountKeyboard(walletId);
-
+		// Delete previous message
 		if (messageId) {
 			try {
-				await bot.deleteMessage(chatId, messageId);
+				await getBot().deleteMessage(chatId, messageId);
 			} catch (e) {
 				// Ignore delete errors
 			}
 		}
 
-		await bot.sendMessage(chatId, text, {
+		// Store state for address input
+		userStates.set(chatId, {
+			action: 'withdraw_address',
+			data: { walletId, balance },
+			messageId,
+		});
+
+		const text = `
+💸 <b>Withdraw 100% BNB</b>
+
+Current Balance: <b>${formatBnb(balance)} BNB</b>
+
+Send the destination BSC address to withdraw all BNB:
+
+Example:
+<code>0x1234567890abcdef...</code>
+
+<i>Send the address now or click Cancel</i>
+        `.trim();
+
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
-			reply_markup: keyboard,
+			reply_markup: {
+				inline_keyboard: [[{ text: '❌ Cancel', callback_data: `wallet_view_${walletId}` }]],
+			},
 		});
 	} catch (error: any) {
 		logger.error('Error in withdraw initiate:', error.message);
@@ -590,7 +739,7 @@ export async function handleWithdrawPercent(
 	try {
 		const userId = await getUserId(chatId);
 		if (!userId) {
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
@@ -599,7 +748,7 @@ export async function handleWithdrawPercent(
 		const wallet = wallets.find((w) => w._id.toString() === walletId);
 
 		if (!wallet) {
-			await bot.sendMessage(chatId, '❌ Wallet not found.');
+			await getBot().sendMessage(chatId, '❌ Wallet not found.');
 			return;
 		}
 
@@ -625,7 +774,7 @@ Example:
 <i>Send the address now or click Cancel</i>
         `.trim();
 
-		await bot.sendMessage(chatId, text, {
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 			reply_markup: {
 				inline_keyboard: [[{ text: '❌ Cancel', callback_data: `wallet_view_${walletId}` }]],
@@ -650,11 +799,14 @@ export async function processWithdrawAddress(
 			return;
 		}
 
-		const { walletId, amount } = state.data;
+		const { walletId, balance } = state.data;
+
+		// Use balance from state (100% withdraw)
+		const amount = balance;
 
 		// Delete message
 		try {
-			await bot.deleteMessage(chatId, msgId);
+			await getBot().deleteMessage(chatId, msgId);
 		} catch (e) {
 			// Ignore
 		}
@@ -663,13 +815,13 @@ export async function processWithdrawAddress(
 		userStates.delete(chatId);
 
 		// Send processing message
-		const processingMsg = await bot.sendMessage(chatId, '⏳ Processing withdrawal...');
+		const processingMsg = await getBot().sendMessage(chatId, '⏳ Processing withdrawal...');
 
 		// Get user ID
 		const userId = await getUserId(chatId);
 		if (!userId) {
-			await bot.deleteMessage(chatId, processingMsg.message_id);
-			await bot.sendMessage(chatId, '❌ User not found. Please use /start first.');
+			await getBot().deleteMessage(chatId, processingMsg.message_id);
+			await getBot().sendMessage(chatId, '❌ User not found. Please use /start first.');
 			return;
 		}
 
@@ -677,10 +829,10 @@ export async function processWithdrawAddress(
 		const result = await transferBnb(walletId, toAddress, amount, userId);
 
 		// Delete processing message
-		await bot.deleteMessage(chatId, processingMsg.message_id);
+		await getBot().deleteMessage(chatId, processingMsg.message_id);
 
 		if (!result.success) {
-			await bot.sendMessage(chatId, `❌ Withdrawal failed: ${result.error || 'Unknown error'}`);
+			await getBot().sendMessage(chatId, `❌ Withdrawal failed: ${result.error || 'Unknown error'}`);
 			return;
 		}
 
@@ -697,12 +849,12 @@ View on BscScan:
 https://bscscan.com/tx/${result.txHash}
         `.trim();
 
-		await bot.sendMessage(chatId, text, {
+		await getBot().sendMessage(chatId, text, {
 			parse_mode: 'HTML',
 		});
 	} catch (error: any) {
 		logger.error('Error processing withdraw address:', error.message);
-		await bot.sendMessage(chatId, '❌ Failed to process withdrawal.');
+		await getBot().sendMessage(chatId, '❌ Failed to process withdrawal.');
 	}
 }
 
@@ -727,6 +879,12 @@ export async function handleWalletTextMessage(msg: TelegramBot.Message): Promise
 	// Handle withdraw address
 	if (state.action === 'withdraw_address') {
 		await processWithdrawAddress(chatId, text, msg.message_id);
+		return true;
+	}
+
+	// Handle rename wallet
+	if (state.action === 'rename_wallet') {
+		await processWalletRename(chatId, text, msg.message_id);
 		return true;
 	}
 
