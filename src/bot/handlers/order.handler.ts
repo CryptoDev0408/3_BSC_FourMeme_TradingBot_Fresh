@@ -318,7 +318,7 @@ ${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
 					},
 				],
 				[{ text: '✅ Create Order', callback_data: 'order_config_create' }],
-				[{ text: '� Back to Orders', callback_data: 'order_config_cancel' }],
+				[{ text: '🛡️ Back to Orders', callback_data: 'order_config_cancel' }],
 			],
 		};
 
@@ -445,7 +445,7 @@ Choose an amount or send custom value:
 		inline_keyboard: [
 			...amounts.map(amt => ([{ text: `${amt} BNB`, callback_data: `order_config_amount_${amt}` }])),
 			[{ text: '✏️ Custom BNB', callback_data: 'order_config_amount_custom' }],
-			[{ text: '� Back', callback_data: 'order_config_back' }],
+			[{ text: '🛡️ Back', callback_data: 'order_config_back' }],
 		],
 	};
 
@@ -539,7 +539,7 @@ Choose slippage percentage:
 	const keyboard = {
 		inline_keyboard: [
 			...slippages.map(slip => ([{ text: `${slip}%`, callback_data: `order_config_slippage_${slip}` }])),
-			[{ text: '� Back', callback_data: 'order_config_back' }],
+			[{ text: '🛡️ Back', callback_data: 'order_config_back' }],
 		],
 	};
 
@@ -598,7 +598,7 @@ Choose percentage:
 		inline_keyboard: [
 			...percents.map(pct => ([{ text: `${pct}%`, callback_data: `order_config_tp_${pct}` }])),
 			[{ text: '✏️ Custom %', callback_data: 'order_config_tp_custom' }],
-			[{ text: '� Back', callback_data: 'order_config_back' }],
+			[{ text: '🛡️ Back', callback_data: 'order_config_back' }],
 		],
 	};
 
@@ -664,7 +664,7 @@ Choose percentage:
 		inline_keyboard: [
 			...percents.map(pct => ([{ text: `${pct}%`, callback_data: `order_config_sl_${pct}` }])),
 			[{ text: '✏️ Custom %', callback_data: 'order_config_sl_custom' }],
-			[{ text: '� Back', callback_data: 'order_config_back' }],
+			[{ text: '🛡️ Back', callback_data: 'order_config_back' }],
 		],
 	};
 
@@ -808,6 +808,29 @@ export async function handleOrderConfigCreate(chatId: string, messageId?: number
 		if (!user) return;
 
 		const config = state.orderConfig;
+
+		// Check if wallet already has an order
+		const existingOrders = await getUserOrders(user._id.toString());
+		const walletHasOrder = existingOrders.some(
+			(order: any) => order.walletId?._id?.toString() === state.data.walletId
+		);
+
+		if (walletHasOrder) {
+			const wallet = await Wallet.findById(state.data.walletId);
+			const walletName = wallet?.name || 'this wallet';
+
+			await getBot().sendMessage(
+				chatId,
+				`⚠️ <b>Wallet Already Has an Order</b>\n\n` +
+				`The wallet <b>${walletName}</b> already has an order.\n\n` +
+				`Each wallet can only have one order at a time. Please select a different wallet or remove the existing order first.`,
+				{ parse_mode: 'HTML' }
+			);
+
+			// Return to config screen
+			await showOrderCreateConfig(chatId, messageId);
+			return;
+		}
 
 		// Create order with custom settings
 		const result = await createOrder(user._id.toString(), state.data.walletId, {
