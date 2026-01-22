@@ -28,7 +28,7 @@ Quick reference for all button callbacks in the Orders UI.
 | 📊 Slippage       | `order_slippage_{orderId}` | Show slippage selection  |
 | 🪙 Manual Buy     | `order_manual_{orderId}`   | Show manual buy prompt   |
 | 🗑 Remove Order   | `order_remove_{orderId}`   | Show remove confirmation |
-| 💨 Back to Orders | `orders`                   | Return to orders list    |
+| 🛡️ Back to Orders | `orders`                   | Return to orders list    |
 
 ---
 
@@ -65,7 +65,7 @@ Quick reference for all button callbacks in the Orders UI.
 | 🛑 Set Stop Loss %   | `order_sl_{orderId}`       | Prompt for SL percentage |
 | ✅ Toggle TP On/Off  | `order_tptoggle_{orderId}` | Toggle TP enabled        |
 | ✅ Toggle SL On/Off  | `order_sltoggle_{orderId}` | Toggle SL enabled        |
-| 💨 Back              | `order_view_{orderId}`     | Return to order detail   |
+| 🛡️ Back              | `order_view_{orderId}`     | Return to order detail   |
 
 ---
 
@@ -78,7 +78,7 @@ Quick reference for all button callbacks in the Orders UI.
 | 🏃 Fast (10 Gwei)  | `order_setgas_{orderId}_10` | Set gas to 10 Gwei     |
 | 🚀 Turbo (20 Gwei) | `order_setgas_{orderId}_20` | Set gas to 20 Gwei     |
 | ✏️ Custom Gas      | `order_customgas_{orderId}` | Prompt for custom gas  |
-| 💨 Back            | `order_view_{orderId}`      | Return to order detail |
+| 🛡️ Back            | `order_view_{orderId}`      | Return to order detail |
 
 ---
 
@@ -93,7 +93,7 @@ Quick reference for all button callbacks in the Orders UI.
 | 20%                | `order_setslippage_{orderId}_20` | Set slippage to 20%        |
 | 25%                | `order_setslippage_{orderId}_25` | Set slippage to 25%        |
 | ✏️ Custom Slippage | `order_customslippage_{orderId}` | Prompt for custom slippage |
-| 💨 Back            | `order_view_{orderId}`           | Return to order detail     |
+| 🛡️ Back            | `order_view_{orderId}`           | Return to order detail     |
 
 ---
 

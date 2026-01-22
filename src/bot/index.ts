@@ -28,6 +28,8 @@ import {
 	handleOrderConfigAmount,
 	handleOrderSetConfigAmount,
 	handleOrderConfigAmountCustom,
+	handleOrderConfigWallet,
+	handleOrderSetConfigWallet,
 	handleOrderConfigSlippage,
 	handleOrderSetConfigSlippage,
 	handleOrderConfigTP,
@@ -312,6 +314,11 @@ function setupCallbackHandlers(): void {
 				await handleOrderCreate(chatId, query.message?.message_id);
 			} else if (data === 'order_create_confirm') {
 				await confirmOrderCreate(chatId, query.message?.message_id);
+			} else if (data === 'order_config_wallet') {
+				await handleOrderConfigWallet(chatId, query.message?.message_id);
+			} else if (data.startsWith('order_config_setwallet_')) {
+				const walletId = data.replace('order_config_setwallet_', '');
+				await handleOrderSetConfigWallet(chatId, walletId, query.message?.message_id);
 			} else if (data === 'order_config_amount') {
 				await handleOrderConfigAmount(chatId, query.message?.message_id);
 			} else if (data === 'order_config_amount_custom') {

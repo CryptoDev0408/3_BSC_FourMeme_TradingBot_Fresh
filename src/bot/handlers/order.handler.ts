@@ -11,6 +11,7 @@ import {
 } from '../../core/order/order.manager';
 import { executeManualBuy, validateOrderExecution } from '../../core/order/order.executor';
 import { getUserWallets } from '../../core/wallet/wallet.manager';
+import { Wallet } from '../../database/models/wallet.model';
 import { updateWalletBalance } from '../../core/wallet/wallet.service';
 import { isValidAddress, validateBnbAmount, validateSlippage } from '../../utils/validation';
 import { formatBnb, formatAddress, formatToggle } from '../../utils/formatter';
@@ -255,11 +256,28 @@ async function showOrderCreateConfig(chatId: string, messageId?: number): Promis
 		if (!state || !state.orderConfig) return;
 
 		const config = state.orderConfig;
+		const walletId = state.data?.walletId;
+
+		// Get user
+		const user = await User.findOne({ chatId });
+		if (!user) return;
+
+		// Get wallet info if selected
+		let walletInfo = '';
+		if (walletId) {
+			const wallet = await Wallet.findById(walletId);
+			if (wallet) {
+				const balanceBnb = typeof wallet.balance === 'object' ? wallet.balance.bnb : wallet.balance;
+				walletInfo = `💼 Wallet: <b>${wallet.name}</b>\n📍 <code>${wallet.address}</code>\n💰 Balance: <b>${balanceBnb} BNB</b>\n\n`;
+			}
+		} else {
+			walletInfo = '💼 Wallet: <b>Not selected</b>\n\n';
+		}
 
 		const text = `
 ⚙️ <b>Configure New Order</b>
 
-<b>Trading Settings:</b>
+${walletInfo}<b>Trading Settings:</b>
 💰 Buy Amount: <b>${config.tradingAmount} BNB</b>
 📊 Slippage: <b>${config.slippage}%</b>
 
@@ -276,6 +294,7 @@ ${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
 
 		const keyboard = {
 			inline_keyboard: [
+				[{ text: walletId ? `💼 Change Wallet` : `💼 Select Wallet`, callback_data: 'order_config_wallet' }],
 				[{ text: `💰 Amount: ${config.tradingAmount} BNB`, callback_data: 'order_config_amount' }],
 				[{ text: `📊 Slippage: ${config.slippage}%`, callback_data: 'order_config_slippage' }],
 				[
@@ -329,6 +348,81 @@ ${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
 	} catch (error: any) {
 		logger.error('Failed to show order config:', error.message);
 	}
+}
+
+/**
+ * Handle configuration - Wallet Selection
+ */
+export async function handleOrderConfigWallet(chatId: string, messageId?: number): Promise<void> {
+	try {
+		const state = userStates.get(chatId);
+		if (!state) return;
+
+		// Get user
+		const user = await User.findOne({ chatId });
+		if (!user) return;
+
+		// Get user's active wallets
+		const wallets = await getUserWallets(user._id.toString());
+
+		if (wallets.length === 0) {
+			await getBot().sendMessage(chatId, '❌ You have no active wallets. Please create one first.');
+			return;
+		}
+
+		const text = `
+💼 <b>Select Wallet for Order</b>
+
+Choose which wallet to use for this order:
+		`.trim();
+
+		const buttons = wallets.map(wallet => {
+			const balanceBnb = typeof wallet.balance === 'object' ? wallet.balance.bnb : wallet.balance;
+			return [{
+				text: `${wallet._id.toString() === state.data?.walletId ? '✅' : '⚪'} ${wallet.name} | ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)} | ${balanceBnb} BNB`,
+				callback_data: `order_config_setwallet_${wallet._id.toString()}`
+			}];
+		});
+
+		const keyboard = {
+			inline_keyboard: [
+				...buttons,
+				[{ text: '🛡️ Back', callback_data: 'order_config_back' }],
+			],
+		};
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show wallet selection:', error.message);
+	}
+}
+
+/**
+ * Handle wallet selection for order config
+ */
+export async function handleOrderSetConfigWallet(chatId: string, walletId: string, messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state) return;
+
+	// Update wallet in state
+	if (!state.data) state.data = {};
+	state.data.walletId = walletId;
+	userStates.set(chatId, state);
+
+	// Return to main config screen
+	await showOrderCreateConfig(chatId, messageId);
 }
 
 /**

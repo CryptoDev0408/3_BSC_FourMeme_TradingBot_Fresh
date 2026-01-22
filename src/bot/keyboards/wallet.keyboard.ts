@@ -35,7 +35,7 @@ export function getWalletListKeyboard(
 	// Pagination buttons
 	const paginationRow: TelegramBot.InlineKeyboardButton[] = [];
 	if (page > 0) {
-		paginationRow.push({ text: '💨 Previous', callback_data: `wallets_page_${page - 1}` });
+		paginationRow.push({ text: '🛡️ Previous', callback_data: `wallets_page_${page - 1}` });
 	}
 	if (end < wallets.length) {
 		paginationRow.push({ text: 'Next ➡️', callback_data: `wallets_page_${page + 1}` });
@@ -71,7 +71,7 @@ export function getWalletDetailKeyboard(walletId: string, isActive: boolean): Te
 		[
 			{ text: '🔑 Show Private Key', callback_data: `wallet_showkey_${walletId}` },
 		],
-		[{ text: '💨 Back to Wallets', callback_data: 'wallets' }],
+		[{ text: '🛡️ Back to Wallets', callback_data: 'wallets' }],
 	];
 
 	return { inline_keyboard: buttons };

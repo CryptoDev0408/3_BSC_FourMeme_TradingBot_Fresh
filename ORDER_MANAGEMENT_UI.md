@@ -90,7 +90,7 @@ Gas Settings:
 - `[🎯 TP/SL Settings] [⚡ Gas Settings]`
 - `[📊 Slippage] [🪙 Manual Buy]`
 - `[🗑 Remove Order]`
-- `[💨 Back to Orders]`
+- `[🛡️ Back to Orders]`
 
 ---
 
@@ -173,7 +173,7 @@ Status: ✅ Enabled
 
 - `[🎯 Set Take Profit %] [🛑 Set Stop Loss %]`
 - `[✅ Toggle TP On/Off] [✅ Toggle SL On/Off]`
-- `[💨 Back]`
+- `[🛡️ Back]`
 
 **Custom Percentage Flow**:
 When user clicks "Set Take Profit %":
@@ -208,7 +208,7 @@ Select gas price for transactions:
 - `[🐢 Slow (3 Gwei)] [🚶 Normal (5 Gwei)]`
 - `[🏃 Fast (10 Gwei)] [🚀 Turbo (20 Gwei)]`
 - `[✏️ Custom Gas]`
-- `[💨 Back]`
+- `[🛡️ Back]`
 
 **Custom Gas Flow**:
 If user clicks "✏️ Custom Gas":
@@ -243,7 +243,7 @@ Select slippage percentage:
 - `[1%] [5%] [10%]`
 - `[15%] [20%] [25%]`
 - `[✏️ Custom Slippage]`
-- `[💨 Back]`
+- `[🛡️ Back]`
 
 **Custom Slippage Flow**:
 
