@@ -1,0 +1,341 @@
+import { ethers } from 'ethers';
+import { B_Wallet } from './B_Wallet';
+import { B_Token } from './B_Token';
+import { logger } from '../../utils/logger';
+
+// PancakeSwap ABIs
+import { PANCAKESWAP_ROUTER_ABI } from '../../abi/pancakeswap-router.abi';
+
+// Import config
+import { config } from '../../config/config';
+
+/**
+ * B_Trading - Buy/Sell Execution Utility
+ * Handles all swap operations on PancakeSwap
+ */
+export class B_Trading {
+	private static provider: ethers.providers.JsonRpcProvider;
+	private static routerContract: ethers.Contract;
+	private static ROUTER_ADDRESS = '0x10ED43C718714eb63d5aA57B78B54704E256024E'; // PancakeSwap Router V2
+	private static WBNB_ADDRESS = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+
+	/**
+	 * Initialize trading service
+	 */
+	static initialize() {
+		if (!this.provider) {
+			this.provider = new ethers.providers.JsonRpcProvider(config.bsc.rpcHttpUrl);
+			this.routerContract = new ethers.Contract(
+				this.ROUTER_ADDRESS,
+				PANCAKESWAP_ROUTER_ABI,
+				this.provider
+			);
+			logger.info('B_Trading initialized');
+		}
+	}
+
+	/**
+	 * Buy tokens with BNB
+	 */
+	static async buy(params: {
+		wallet: B_Wallet;
+		token: B_Token;
+		bnbAmount: number;
+		slippage: number;
+		gasPrice: string;
+		gasLimit?: number;
+	}): Promise<{ success: boolean; txHash?: string; error?: string; tokenAmount?: string }> {
+		try {
+			this.initialize();
+
+			const { wallet, token, bnbAmount, slippage, gasPrice, gasLimit = 300000 } = params;
+
+			// Get ethers wallet instance
+			const ethersWallet = wallet.getEthersWallet();
+			const routerWithSigner = this.routerContract.connect(ethersWallet);
+
+			// Calculate amounts
+			const amountIn = ethers.utils.parseEther(bnbAmount.toString());
+
+			// Get expected output amount
+			const path = [this.WBNB_ADDRESS, token.address];
+			const amounts = await this.routerContract.getAmountsOut(amountIn, path);
+			const expectedOut = amounts[1];
+
+			// Calculate minimum amount with slippage
+			const slippageBps = Math.floor(slippage * 100); // Convert to basis points
+			const minAmountOut = expectedOut.mul(10000 - slippageBps).div(10000);
+
+			// Get deadline (10 minutes from now)
+			const deadline = Math.floor(Date.now() / 1000) + 600;
+
+			logger.info(`Buying ${token.symbol}...`);
+			logger.info(`Amount In: ${bnbAmount} BNB`);
+			logger.info(`Expected Out: ${ethers.utils.formatUnits(expectedOut, token.decimals)} ${token.symbol}`);
+			logger.info(`Min Amount Out (${slippage}% slippage): ${ethers.utils.formatUnits(minAmountOut, token.decimals)} ${token.symbol}`);
+
+			// Execute swap
+			const tx = await routerWithSigner.swapExactETHForTokens(
+				minAmountOut,
+				path,
+				wallet.address,
+				deadline,
+				{
+					value: amountIn,
+					gasPrice: ethers.utils.parseUnits(gasPrice, 'gwei'),
+					gasLimit,
+				}
+			);
+
+			logger.info(`Transaction sent: ${tx.hash}`);
+
+			// Wait for confirmation
+			const receipt = await tx.wait();
+
+			if (receipt.status === 1) {
+				const tokenAmount = ethers.utils.formatUnits(expectedOut, token.decimals);
+				logger.success(`Buy successful! Got ${tokenAmount} ${token.symbol}`);
+				return {
+					success: true,
+					txHash: tx.hash,
+					tokenAmount,
+				};
+			} else {
+				logger.error('Transaction failed');
+				return {
+					success: false,
+					error: 'Transaction reverted',
+				};
+			}
+		} catch (error: any) {
+			logger.error('Buy failed:', error.message);
+			return {
+				success: false,
+				error: error.message || 'Unknown error',
+			};
+		}
+	}
+
+	/**
+	 * Sell tokens for BNB
+	 */
+	static async sell(params: {
+		wallet: B_Wallet;
+		token: B_Token;
+		tokenAmount: string;
+		slippage: number;
+		gasPrice: string;
+		gasLimit?: number;
+	}): Promise<{ success: boolean; txHash?: string; error?: string; bnbAmount?: string }> {
+		try {
+			this.initialize();
+
+			const { wallet, token, tokenAmount, slippage, gasPrice, gasLimit = 300000 } = params;
+
+			// Get ethers wallet instance
+			const ethersWallet = wallet.getEthersWallet();
+			const routerWithSigner = this.routerContract.connect(ethersWallet);
+
+			// Parse token amount
+			const amountIn = ethers.utils.parseUnits(tokenAmount, token.decimals);
+
+			// Check token approval
+			const erc20Abi = [
+				'function allowance(address owner, address spender) view returns (uint256)',
+				'function approve(address spender, uint256 amount) returns (bool)',
+			];
+			const tokenContract = new ethers.Contract(token.address, erc20Abi, ethersWallet);
+
+			const allowance = await tokenContract.allowance(wallet.address, this.ROUTER_ADDRESS);
+
+			if (allowance.lt(amountIn)) {
+				logger.info('Approving token...');
+				const approveTx = await tokenContract.approve(
+					this.ROUTER_ADDRESS,
+					ethers.constants.MaxUint256,
+					{
+						gasPrice: ethers.utils.parseUnits(gasPrice, 'gwei'),
+						gasLimit: 100000,
+					}
+				);
+				await approveTx.wait();
+				logger.success('Token approved');
+			}
+
+			// Get expected output amount
+			const path = [token.address, this.WBNB_ADDRESS];
+			const amounts = await this.routerContract.getAmountsOut(amountIn, path);
+			const expectedOut = amounts[1];
+
+			// Calculate minimum amount with slippage
+			const slippageBps = Math.floor(slippage * 100);
+			const minAmountOut = expectedOut.mul(10000 - slippageBps).div(10000);
+
+			// Get deadline
+			const deadline = Math.floor(Date.now() / 1000) + 600;
+
+			logger.info(`Selling ${tokenAmount} ${token.symbol}...`);
+			logger.info(`Expected Out: ${ethers.utils.formatEther(expectedOut)} BNB`);
+			logger.info(`Min Amount Out (${slippage}% slippage): ${ethers.utils.formatEther(minAmountOut)} BNB`);
+
+			// Execute swap
+			const tx = await routerWithSigner.swapExactTokensForETH(
+				amountIn,
+				minAmountOut,
+				path,
+				wallet.address,
+				deadline,
+				{
+					gasPrice: ethers.utils.parseUnits(gasPrice, 'gwei'),
+					gasLimit,
+				}
+			);
+
+			logger.info(`Transaction sent: ${tx.hash}`);
+
+			// Wait for confirmation
+			const receipt = await tx.wait();
+
+			if (receipt.status === 1) {
+				const bnbAmount = ethers.utils.formatEther(expectedOut);
+				logger.success(`Sell successful! Got ${bnbAmount} BNB`);
+				return {
+					success: true,
+					txHash: tx.hash,
+					bnbAmount,
+				};
+			} else {
+				logger.error('Transaction failed');
+				return {
+					success: false,
+					error: 'Transaction reverted',
+				};
+			}
+		} catch (error: any) {
+			logger.error('Sell failed:', error.message);
+			return {
+				success: false,
+				error: error.message || 'Unknown error',
+			};
+		}
+	}
+
+	/**
+	 * Get token price in BNB
+	 */
+	static async getTokenPrice(tokenAddress: string, amount: string = '1'): Promise<string | null> {
+		try {
+			this.initialize();
+
+			const path = [tokenAddress, this.WBNB_ADDRESS];
+			const amountIn = ethers.utils.parseEther(amount);
+			const amounts = await this.routerContract.getAmountsOut(amountIn, path);
+			const bnbOut = amounts[1];
+
+			return ethers.utils.formatEther(bnbOut);
+		} catch (error: any) {
+			logger.error('Failed to get token price:', error.message);
+			return null;
+		}
+	}
+
+	/**
+	 * Get BNB price in USD (using USDT pair)
+	 */
+	static async getBNBPrice(): Promise<number> {
+		try {
+			this.initialize();
+
+			const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // BSC-USD
+			const path = [this.WBNB_ADDRESS, USDT_ADDRESS];
+			const amountIn = ethers.utils.parseEther('1');
+			const amounts = await this.routerContract.getAmountsOut(amountIn, path);
+			const usdtOut = amounts[1];
+
+			return parseFloat(ethers.utils.formatUnits(usdtOut, 18));
+		} catch (error: any) {
+			logger.error('Failed to get BNB price:', error.message);
+			return 0;
+		}
+	}
+
+	/**
+	 * Estimate gas for buy transaction
+	 */
+	static async estimateBuyGas(params: {
+		wallet: B_Wallet;
+		token: B_Token;
+		bnbAmount: number;
+		slippage: number;
+	}): Promise<bigint | null> {
+		try {
+			this.initialize();
+
+			const { wallet, token, bnbAmount, slippage } = params;
+			const ethersWallet = wallet.getEthersWallet();
+			const routerWithSigner = this.routerContract.connect(ethersWallet);
+
+			const amountIn = ethers.utils.parseEther(bnbAmount.toString());
+			const path = [this.WBNB_ADDRESS, token.address];
+			const amounts = await this.routerContract.getAmountsOut(amountIn, path);
+			const expectedOut = amounts[1];
+
+			const slippageBps = Math.floor(slippage * 100);
+			const minAmountOut = expectedOut.mul(10000 - slippageBps).div(10000);
+			const deadline = Math.floor(Date.now() / 1000) + 600;
+
+			const gasEstimate = await routerWithSigner.swapExactETHForTokens.estimateGas(
+				minAmountOut,
+				path,
+				wallet.address,
+				deadline,
+				{ value: amountIn }
+			);
+
+			return gasEstimate;
+		} catch (error: any) {
+			logger.error('Failed to estimate gas:', error.message);
+			return null;
+		}
+	}
+
+	/**
+	 * Estimate gas for sell transaction
+	 */
+	static async estimateSellGas(params: {
+		wallet: B_Wallet;
+		token: B_Token;
+		tokenAmount: string;
+		slippage: number;
+	}): Promise<bigint | null> {
+		try {
+			this.initialize();
+
+			const { wallet, token, tokenAmount, slippage } = params;
+			const ethersWallet = wallet.getEthersWallet();
+			const routerWithSigner = this.routerContract.connect(ethersWallet);
+
+			const amountIn = ethers.utils.parseUnits(tokenAmount, token.decimals);
+			const path = [token.address, this.WBNB_ADDRESS];
+			const amounts = await this.routerContract.getAmountsOut(amountIn, path);
+			const expectedOut = amounts[1];
+
+			const slippageBps = Math.floor(slippage * 100);
+			const minAmountOut = expectedOut.mul(10000 - slippageBps).div(10000);
+			const deadline = Math.floor(Date.now() / 1000) + 600;
+
+			const gasEstimate = await routerWithSigner.swapExactTokensForETH.estimateGas(
+				amountIn,
+				minAmountOut,
+				path,
+				wallet.address,
+				deadline
+			);
+
+			return gasEstimate;
+		} catch (error: any) {
+			logger.error('Failed to estimate gas:', error.message);
+			return null;
+		}
+	}
+}
