@@ -38,7 +38,7 @@ export function getOrdersListKeyboard(
 	}
 
 	// Add action buttons
-	buttons.push([{ text: '➕ Create New Order', callback_data: 'order_create' }]);
+	buttons.push([{ text: '⭐ Create New Order', callback_data: 'order_create' }]);
 
 	buttons.push([{ text: '🏠 Main Menu', callback_data: 'main_menu' }]);
 

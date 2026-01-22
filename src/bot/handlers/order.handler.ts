@@ -299,7 +299,7 @@ ${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
 					},
 				],
 				[{ text: '✅ Create Order', callback_data: 'order_config_create' }],
-				[{ text: '🔙 Back to Orders', callback_data: 'order_config_cancel' }],
+				[{ text: '� Back to Orders', callback_data: 'order_config_cancel' }],
 			],
 		};
 
@@ -351,7 +351,7 @@ Choose an amount or send custom value:
 		inline_keyboard: [
 			...amounts.map(amt => ([{ text: `${amt} BNB`, callback_data: `order_config_amount_${amt}` }])),
 			[{ text: '✏️ Custom BNB', callback_data: 'order_config_amount_custom' }],
-			[{ text: '🔙 Back', callback_data: 'order_config_back' }],
+			[{ text: '� Back', callback_data: 'order_config_back' }],
 		],
 	};
 
@@ -445,7 +445,7 @@ Choose slippage percentage:
 	const keyboard = {
 		inline_keyboard: [
 			...slippages.map(slip => ([{ text: `${slip}%`, callback_data: `order_config_slippage_${slip}` }])),
-			[{ text: '🔙 Back', callback_data: 'order_config_back' }],
+			[{ text: '� Back', callback_data: 'order_config_back' }],
 		],
 	};
 
@@ -504,7 +504,7 @@ Choose percentage:
 		inline_keyboard: [
 			...percents.map(pct => ([{ text: `${pct}%`, callback_data: `order_config_tp_${pct}` }])),
 			[{ text: '✏️ Custom %', callback_data: 'order_config_tp_custom' }],
-			[{ text: '🔙 Back', callback_data: 'order_config_back' }],
+			[{ text: '� Back', callback_data: 'order_config_back' }],
 		],
 	};
 
@@ -570,7 +570,7 @@ Choose percentage:
 		inline_keyboard: [
 			...percents.map(pct => ([{ text: `${pct}%`, callback_data: `order_config_sl_${pct}` }])),
 			[{ text: '✏️ Custom %', callback_data: 'order_config_sl_custom' }],
-			[{ text: '🔙 Back', callback_data: 'order_config_back' }],
+			[{ text: '� Back', callback_data: 'order_config_back' }],
 		],
 	};
 

@@ -93,7 +93,7 @@ export async function showWalletsList(chatId: string, messageId?: number, page: 
 
 		if (wallets.length === 0) {
 			text += '📭 You don\'t have any wallets yet.\n\n';
-			text += 'Click "➕ Generate Wallet" to create a new wallet or "📥 Import Wallet" to import an existing one.';
+			text += 'Click "⭐ Generate Wallet" to create a new wallet or "📥 Import Wallet" to import an existing one.';
 		} else {
 			text += `📊 Total Wallets: <b>${wallets.length}</b>\n\n`;
 			text += '<i>Click on a wallet to view details</i>';

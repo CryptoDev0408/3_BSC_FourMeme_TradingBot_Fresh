@@ -10,7 +10,7 @@ Quick reference for all button callbacks in the Orders UI.
 | ------------------- | ---------------------- | ------------------- |
 | Order #1 - 0.05 BNB | `order_view_{orderId}` | Show order detail   |
 | Order #2 - 0.1 BNB  | `order_view_{orderId}` | Show order detail   |
-| ➕ Create New Order | `order_create`         | Create new order    |
+| ⭐ Create New Order | `order_create`         | Create new order    |
 | 🏠 Main Menu        | `main_menu`            | Return to main menu |
 
 ---
