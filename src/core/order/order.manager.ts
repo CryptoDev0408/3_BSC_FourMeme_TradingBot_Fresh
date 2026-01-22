@@ -58,7 +58,15 @@ export async function getOrderCount(userId: string): Promise<number> {
 export async function createOrder(
 	userId: string,
 	walletId: string,
-	orderName?: string
+	customConfig?: {
+		tradingAmount?: number;
+		slippage?: number;
+		takeProfitPercent?: number;
+		takeProfitEnabled?: boolean;
+		stopLossPercent?: number;
+		stopLossEnabled?: boolean;
+		orderName?: string;
+	}
 ): Promise<OrderResult> {
 	try {
 		// Verify wallet exists and belongs to user
@@ -69,20 +77,20 @@ export async function createOrder(
 
 		// Get order count for auto-naming
 		const orderCount = await getOrderCount(userId);
-		const name = orderName || `Order #${orderCount + 1}`;
+		const name = customConfig?.orderName || `Order #${orderCount + 1}`;
 
-		// Create order with default settings
+		// Create order with custom or default settings
 		const order = await Order.create({
 			userId,
 			walletId,
 			name,
 			isActive: false,
-			tradingAmount: 0.01,
-			takeProfitPercent: 50,
-			takeProfitEnabled: true,
-			stopLossPercent: 25,
-			stopLossEnabled: true,
-			slippage: 10,
+			tradingAmount: customConfig?.tradingAmount ?? 0.01,
+			takeProfitPercent: customConfig?.takeProfitPercent ?? 50,
+			takeProfitEnabled: customConfig?.takeProfitEnabled ?? true,
+			stopLossPercent: customConfig?.stopLossPercent ?? 25,
+			stopLossEnabled: customConfig?.stopLossEnabled ?? true,
+			slippage: customConfig?.slippage ?? 10,
 			gasFee: {
 				gasPrice: '5',
 				gasLimit: 300000,

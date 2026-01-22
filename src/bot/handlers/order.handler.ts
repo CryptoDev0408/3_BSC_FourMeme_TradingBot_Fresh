@@ -47,6 +47,15 @@ interface UserState {
 	orderId?: string;
 	step?: string;
 	data?: any;
+	lastMessageId?: number;
+	orderConfig?: {
+		tradingAmount: number;
+		slippage: number;
+		takeProfitPercent: number;
+		takeProfitEnabled: boolean;
+		stopLossPercent: number;
+		stopLossEnabled: boolean;
+	};
 }
 
 const userStates = new Map<string, UserState>();
@@ -196,7 +205,7 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 }
 
 /**
- * Handle order creation - show confirmation page
+ * Handle order creation - show configuration page
  */
 export async function handleOrderCreate(chatId: string, messageId?: number): Promise<void> {
 	try {
@@ -215,22 +224,82 @@ export async function handleOrderCreate(chatId: string, messageId?: number): Pro
 		// Use active wallet or first wallet
 		const targetWallet = wallets.find((w) => w.isActive) || wallets[0];
 
-		// Show confirmation page
-		const text = `➕ <b>Create New Order</b>\n\n` +
-			`You are about to create a new order with default settings:\n\n` +
-			`💼 <b>Wallet:</b> ${targetWallet.name}\n` +
-			`💰 <b>Amount:</b> 0.01 BNB\n` +
-			`📊 <b>Slippage:</b> 10%\n` +
-			`📈 <b>Take Profit:</b> 50% (Enabled)\n` +
-			`📉 <b>Stop Loss:</b> 25% (Enabled)\n` +
-			`⚡ <b>Gas Price:</b> 5 Gwei\n\n` +
-			`You can customize these settings after creation.\n\n` +
-			`Do you want to proceed?`;
+		// Initialize order configuration with defaults
+		userStates.set(chatId, {
+			action: 'order_create',
+			data: { walletId: targetWallet._id.toString() },
+			orderConfig: {
+				tradingAmount: 0.01,
+				slippage: 10,
+				takeProfitPercent: 50,
+				takeProfitEnabled: true,
+				stopLossPercent: 25,
+				stopLossEnabled: true,
+			},
+		});
+
+		// Show configuration screen
+		await showOrderCreateConfig(chatId, messageId);
+	} catch (error: any) {
+		logger.error('Failed to show order creation:', error.message);
+		await getBot().sendMessage(chatId, '❌ Failed to show order creation. Please try again.');
+	}
+}
+
+/**
+ * Show order creation configuration screen
+ */
+async function showOrderCreateConfig(chatId: string, messageId?: number): Promise<void> {
+	try {
+		const state = userStates.get(chatId);
+		if (!state || !state.orderConfig) return;
+
+		const config = state.orderConfig;
+
+		const text = `
+⚙️ <b>Configure New Order</b>
+
+<b>Trading Settings:</b>
+💰 Buy Amount: <b>${config.tradingAmount} BNB</b>
+📊 Slippage: <b>${config.slippage}%</b>
+
+<b>Take Profit:</b>
+${config.takeProfitEnabled ? '✅ Enabled' : '❌ Disabled'}
+📈 Target: <b>${config.takeProfitPercent}%</b>
+
+<b>Stop Loss:</b>
+${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
+📉 Target: <b>${config.stopLossPercent}%</b>
+
+<i>Configure each setting then click Create</i>
+		`.trim();
 
 		const keyboard = {
 			inline_keyboard: [
-				[{ text: '✅ Confirm Create', callback_data: 'order_create_confirm' }],
-				[{ text: '🔙 Back to Orders', callback_data: 'orders' }],
+				[{ text: `💰 Amount: ${config.tradingAmount} BNB`, callback_data: 'order_config_amount' }],
+				[{ text: `📊 Slippage: ${config.slippage}%`, callback_data: 'order_config_slippage' }],
+				[
+					{
+						text: config.takeProfitEnabled ? '✅ TP Enabled' : '❌ TP Disabled',
+						callback_data: 'order_config_tp_toggle'
+					},
+					{
+						text: `📈 ${config.takeProfitPercent}%`,
+						callback_data: config.takeProfitEnabled ? 'order_config_tp' : 'order_config_tp_disabled'
+					},
+				],
+				[
+					{
+						text: config.stopLossEnabled ? '✅ SL Enabled' : '❌ SL Disabled',
+						callback_data: 'order_config_sl_toggle'
+					},
+					{
+						text: `📉 ${config.stopLossPercent}%`,
+						callback_data: config.stopLossEnabled ? 'order_config_sl' : 'order_config_sl_disabled'
+					},
+				],
+				[{ text: '✅ Create Order', callback_data: 'order_config_create' }],
+				[{ text: '🔙 Back to Orders', callback_data: 'order_config_cancel' }],
 			],
 		};
 
@@ -258,13 +327,433 @@ export async function handleOrderCreate(chatId: string, messageId?: number): Pro
 			});
 		}
 	} catch (error: any) {
-		logger.error('Failed to show order creation:', error.message);
-		await getBot().sendMessage(chatId, '❌ Failed to show order creation. Please try again.');
+		logger.error('Failed to show order config:', error.message);
 	}
 }
 
 /**
- * Confirm order creation
+ * Handle configuration - Amount
+ */
+export async function handleOrderConfigAmount(chatId: string, messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state) return;
+
+	const text = `
+💰 <b>Set Trading Amount</b>
+
+Current: <b>${state.orderConfig?.tradingAmount} BNB</b>
+
+Choose an amount or send custom value:
+	`.trim();
+
+	const amounts = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5];
+	const keyboard = {
+		inline_keyboard: [
+			...amounts.map(amt => ([{ text: `${amt} BNB`, callback_data: `order_config_amount_${amt}` }])),
+			[{ text: '✏️ Custom BNB', callback_data: 'order_config_amount_custom' }],
+			[{ text: '🔙 Back', callback_data: 'order_config_back' }],
+		],
+	};
+
+	try {
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show amount config:', error.message);
+	}
+}
+
+/**
+ * Set amount value
+ */
+export async function handleOrderSetConfigAmount(chatId: string, amount: number, messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state || !state.orderConfig) return;
+
+	state.orderConfig.tradingAmount = amount;
+	userStates.set(chatId, state);
+
+	await showOrderCreateConfig(chatId, messageId);
+}
+
+/**
+ * Handle custom amount input
+ */
+export async function handleOrderConfigAmountCustom(chatId: string, messageId?: number): Promise<void> {
+	try {
+		const state = userStates.get(chatId);
+		if (!state || !state.orderConfig) {
+			await getBot().sendMessage(chatId, '❌ Configuration lost. Please try again.');
+			return;
+		}
+
+		// Delete config message
+		if (messageId) {
+			try {
+				await getBot().deleteMessage(chatId, messageId);
+			} catch (error) {
+				// Ignore delete errors
+			}
+		}
+
+		// Prompt for custom amount
+		const msg = await getBot().sendMessage(
+			chatId,
+			'✏️ <b>Custom Trading Amount</b>\n\n' +
+			'Send the BNB amount (min 0.001).\n\n' +
+			'Examples:\n• 0.025\n• 0.15\n• 1.5\n\n' +
+			'Type /cancel to abort.',
+			{ parse_mode: 'HTML' }
+		);
+
+		// Update state to expect custom amount input
+		state.action = 'order_config_amount_custom';
+		state.lastMessageId = msg.message_id;
+	} catch (error: any) {
+		logger.error('Failed to handle custom amount input:', error.message);
+		await getBot().sendMessage(chatId, '❌ An error occurred. Please try again.');
+	}
+}
+
+/**
+ * Handle configuration - Slippage
+ */
+export async function handleOrderConfigSlippage(chatId: string, messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state) return;
+
+	const text = `
+📊 <b>Set Slippage Tolerance</b>
+
+Current: <b>${state.orderConfig?.slippage}%</b>
+
+Choose slippage percentage:
+	`.trim();
+
+	const slippages = [1, 5, 10, 15, 20, 30];
+	const keyboard = {
+		inline_keyboard: [
+			...slippages.map(slip => ([{ text: `${slip}%`, callback_data: `order_config_slippage_${slip}` }])),
+			[{ text: '🔙 Back', callback_data: 'order_config_back' }],
+		],
+	};
+
+	try {
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show slippage config:', error.message);
+	}
+}
+
+/**
+ * Set slippage value
+ */
+export async function handleOrderSetConfigSlippage(chatId: string, slippage: number, messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state || !state.orderConfig) return;
+
+	state.orderConfig.slippage = slippage;
+	userStates.set(chatId, state);
+
+	await showOrderCreateConfig(chatId, messageId);
+}
+
+/**
+ * Handle configuration - Take Profit
+ */
+export async function handleOrderConfigTP(chatId: string, messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state || !state.orderConfig) return;
+
+	const config = state.orderConfig;
+
+	const text = `
+📈 <b>Configure Take Profit</b>
+
+Status: ${config.takeProfitEnabled ? '✅ Enabled' : '❌ Disabled'}
+Target: <b>${config.takeProfitPercent}%</b>
+
+Choose percentage:
+	`.trim();
+
+	const percents = [10, 25, 50, 100, 200, 500];
+	const keyboard = {
+		inline_keyboard: [
+			...percents.map(pct => ([{ text: `${pct}%`, callback_data: `order_config_tp_${pct}` }])),
+			[{ text: '✏️ Custom %', callback_data: 'order_config_tp_custom' }],
+			[{ text: '🔙 Back', callback_data: 'order_config_back' }],
+		],
+	};
+
+	try {
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show TP config:', error.message);
+	}
+}
+
+/**
+ * Toggle TP or set percentage
+ */
+export async function handleOrderSetConfigTP(chatId: string, value: number | 'toggle', messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state || !state.orderConfig) return;
+
+	if (value === 'toggle') {
+		state.orderConfig.takeProfitEnabled = !state.orderConfig.takeProfitEnabled;
+		userStates.set(chatId, state);
+		// Return to main config screen after toggle
+		await showOrderCreateConfig(chatId, messageId);
+	} else {
+		state.orderConfig.takeProfitPercent = value;
+		userStates.set(chatId, state);
+		// Return to main config screen after changing percentage
+		await showOrderCreateConfig(chatId, messageId);
+	}
+}
+
+/**
+ * Handle configuration - Stop Loss
+ */
+export async function handleOrderConfigSL(chatId: string, messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state || !state.orderConfig) return;
+
+	const config = state.orderConfig;
+
+	const text = `
+📉 <b>Configure Stop Loss</b>
+
+Status: ${config.stopLossEnabled ? '✅ Enabled' : '❌ Disabled'}
+Target: <b>${config.stopLossPercent}%</b>
+
+Choose percentage:
+	`.trim();
+
+	const percents = [5, 10, 25, 50, 75];
+	const keyboard = {
+		inline_keyboard: [
+			...percents.map(pct => ([{ text: `${pct}%`, callback_data: `order_config_sl_${pct}` }])),
+			[{ text: '✏️ Custom %', callback_data: 'order_config_sl_custom' }],
+			[{ text: '🔙 Back', callback_data: 'order_config_back' }],
+		],
+	};
+
+	try {
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show SL config:', error.message);
+	}
+}
+
+/**
+ * Toggle SL or set percentage
+ */
+export async function handleOrderSetConfigSL(chatId: string, value: number | 'toggle', messageId?: number): Promise<void> {
+	const state = userStates.get(chatId);
+	if (!state || !state.orderConfig) return;
+
+	if (value === 'toggle') {
+		state.orderConfig.stopLossEnabled = !state.orderConfig.stopLossEnabled;
+		userStates.set(chatId, state);
+		// Return to main config screen after toggle
+		await showOrderCreateConfig(chatId, messageId);
+	} else {
+		state.orderConfig.stopLossPercent = value;
+		userStates.set(chatId, state);
+		// Return to main config screen after changing percentage
+		await showOrderCreateConfig(chatId, messageId);
+	}
+}
+
+/**
+ * Handle custom TP percentage input
+ */
+export async function handleOrderConfigTPCustom(chatId: string, messageId?: number): Promise<void> {
+	try {
+		const state = userStates.get(chatId);
+		if (!state || !state.orderConfig) {
+			await getBot().sendMessage(chatId, '❌ Configuration lost. Please try again.');
+			return;
+		}
+
+		// Delete config message
+		if (messageId) {
+			try {
+				await getBot().deleteMessage(chatId, messageId);
+			} catch (error) {
+				// Ignore delete errors
+			}
+		}
+
+		// Prompt for custom percentage
+		const msg = await getBot().sendMessage(
+			chatId,
+			'✏️ <b>Custom Take Profit Percentage</b>\n\n' +
+			'Send any positive number (min 0.1).\n\n' +
+			'Examples:\n• 75 = +75%\n• 500 = +500%\n• 10000 = +10000%\n\n' +
+			'Type /cancel to abort.',
+			{ parse_mode: 'HTML' }
+		);
+
+		// Update state to expect custom TP input
+		state.action = 'order_config_tp_custom';
+		state.lastMessageId = msg.message_id;
+	} catch (error: any) {
+		logger.error('Failed to handle custom TP input:', error.message);
+		await getBot().sendMessage(chatId, '❌ An error occurred. Please try again.');
+	}
+}
+
+/**
+ * Handle custom SL percentage input
+ */
+export async function handleOrderConfigSLCustom(chatId: string, messageId?: number): Promise<void> {
+	try {
+		const state = userStates.get(chatId);
+		if (!state || !state.orderConfig) {
+			await getBot().sendMessage(chatId, '❌ Configuration lost. Please try again.');
+			return;
+		}
+
+		// Delete config message
+		if (messageId) {
+			try {
+				await getBot().deleteMessage(chatId, messageId);
+			} catch (error) {
+				// Ignore delete errors
+			}
+		}
+
+		// Prompt for custom percentage
+		const msg = await getBot().sendMessage(
+			chatId,
+			'✏️ <b>Custom Stop Loss Percentage</b>\n\n' +
+			'Send any positive number (min 0.1).\n\n' +
+			'Examples:\n• 15 = -15%\n• 50 = -50%\n• 90 = -90%\n\n' +
+			'Type /cancel to abort.',
+			{ parse_mode: 'HTML' }
+		);
+
+		// Update state to expect custom SL input
+		state.action = 'order_config_sl_custom';
+		state.lastMessageId = msg.message_id;
+	} catch (error: any) {
+		logger.error('Failed to handle custom SL input:', error.message);
+		await getBot().sendMessage(chatId, '❌ An error occurred. Please try again.');
+	}
+}
+
+/**
+ * Cancel order configuration
+ */
+export async function handleOrderConfigCancel(chatId: string, messageId?: number): Promise<void> {
+	userStates.delete(chatId);
+	await showOrdersList(chatId, messageId);
+}
+
+/**
+ * Create order with configured settings
+ */
+export async function handleOrderConfigCreate(chatId: string, messageId?: number): Promise<void> {
+	try {
+		const state = userStates.get(chatId);
+		if (!state || !state.orderConfig || !state.data?.walletId) {
+			await getBot().sendMessage(chatId, '❌ Configuration lost. Please try again.');
+			return;
+		}
+
+		const user = await User.findOne({ chatId });
+		if (!user) return;
+
+		const config = state.orderConfig;
+
+		// Create order with custom settings
+		const result = await createOrder(user._id.toString(), state.data.walletId, {
+			tradingAmount: config.tradingAmount,
+			slippage: config.slippage,
+			takeProfitPercent: config.takeProfitPercent,
+			takeProfitEnabled: config.takeProfitEnabled,
+			stopLossPercent: config.stopLossPercent,
+			stopLossEnabled: config.stopLossEnabled,
+		});
+
+		// Clear state
+		userStates.delete(chatId);
+
+		if (!result.success) {
+			await getBot().sendMessage(chatId, `❌ Failed to create order: ${result.error}`);
+			return;
+		}
+
+		// Delete config message
+		if (messageId) {
+			try {
+				await getBot().deleteMessage(chatId, messageId);
+			} catch { }
+		}
+
+		await getBot().sendMessage(chatId, `✅ Order created successfully!\n\n📊 <b>${result.order!.name}</b>`, {
+			parse_mode: 'HTML',
+		});
+
+		// Show order detail
+		await showOrderDetail(chatId, result.order!._id.toString());
+	} catch (error: any) {
+		logger.error('Failed to create order:', error.message);
+		await getBot().sendMessage(chatId, '❌ Failed to create order. Please try again.');
+	}
+}
+
+/**
+ * Confirm order creation (legacy - keeping for compatibility)
  */
 export async function confirmOrderCreate(chatId: string, messageId?: number): Promise<void> {
 	try {
@@ -733,6 +1222,129 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 	if (!state) return false;
 
 	try {
+		// Handle custom amount input
+		if (state.action === 'order_config_amount_custom') {
+			// Delete prompt message
+			if (state.lastMessageId) {
+				try {
+					await getBot().deleteMessage(chatId, state.lastMessageId);
+				} catch (error) {
+					// Ignore delete errors
+				}
+			}
+
+			// Delete user's message
+			try {
+				await getBot().deleteMessage(chatId, msg.message_id);
+			} catch (error) {
+				// Ignore delete errors
+			}
+
+			// Parse amount
+			const amount = parseFloat(text);
+
+			// Validate
+			if (isNaN(amount) || amount < 0.001) {
+				await getBot().sendMessage(
+					chatId,
+					'❌ Invalid amount. Please enter a number greater than or equal to 0.001 BNB.',
+				);
+				// Don't clear state, let user try again
+				return true;
+			}
+
+			// Update config
+			if (state.orderConfig) {
+				state.orderConfig.tradingAmount = amount;
+			}
+
+			// Show main config screen
+			await showOrderCreateConfig(chatId);
+			return true;
+		}
+
+		// Handle custom Take Profit percentage input
+		if (state.action === 'order_config_tp_custom') {
+			// Delete prompt message
+			if (state.lastMessageId) {
+				try {
+					await getBot().deleteMessage(chatId, state.lastMessageId);
+				} catch (error) {
+					// Ignore delete errors
+				}
+			}
+
+			// Delete user's message
+			try {
+				await getBot().deleteMessage(chatId, msg.message_id);
+			} catch (error) {
+				// Ignore delete errors
+			}
+
+			// Parse percentage
+			const percentage = parseFloat(text);
+
+			// Validate
+			if (isNaN(percentage) || percentage < 0.1) {
+				await getBot().sendMessage(
+					chatId,
+					'❌ Invalid percentage. Please enter a number greater than 0.1.',
+				);
+				// Don't clear state, let user try again
+				return true;
+			}
+
+			// Update config
+			if (state.orderConfig) {
+				state.orderConfig.takeProfitPercent = percentage;
+			}
+
+			// Show main config screen
+			await showOrderCreateConfig(chatId);
+			return true;
+		}
+
+		// Handle custom Stop Loss percentage input
+		if (state.action === 'order_config_sl_custom') {
+			// Delete prompt message
+			if (state.lastMessageId) {
+				try {
+					await getBot().deleteMessage(chatId, state.lastMessageId);
+				} catch (error) {
+					// Ignore delete errors
+				}
+			}
+
+			// Delete user's message
+			try {
+				await getBot().deleteMessage(chatId, msg.message_id);
+			} catch (error) {
+				// Ignore delete errors
+			}
+
+			// Parse percentage
+			const percentage = parseFloat(text);
+
+			// Validate
+			if (isNaN(percentage) || percentage < 0.1) {
+				await getBot().sendMessage(
+					chatId,
+					'❌ Invalid percentage. Please enter a number greater than 0.1.',
+				);
+				// Don't clear state, let user try again
+				return true;
+			}
+
+			// Update config
+			if (state.orderConfig) {
+				state.orderConfig.stopLossPercent = percentage;
+			}
+
+			// Show main config screen
+			await showOrderCreateConfig(chatId);
+			return true;
+		}
+
 		if (state.action === 'manual_buy') {
 			// Validate token address
 			if (!isValidAddress(text)) {

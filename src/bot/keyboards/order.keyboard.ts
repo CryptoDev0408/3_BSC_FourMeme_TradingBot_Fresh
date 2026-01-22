@@ -77,7 +77,7 @@ export function getOrderDetailKeyboard(orderId: string, isActive: boolean): Tele
 	// Danger zone
 	buttons.push([{ text: '🗑 Remove Order', callback_data: `order_remove_${orderId}` }]);
 
-	buttons.push([{ text: '⬅️ Back to Orders', callback_data: 'orders' }]);
+	buttons.push([{ text: '💨 Back to Orders', callback_data: 'orders' }]);
 
 	return { inline_keyboard: buttons };
 }
@@ -157,7 +157,7 @@ export function getOrderTPSLKeyboard(orderId: string): TelegramBot.InlineKeyboar
 		{ text: '✅ Toggle SL On/Off', callback_data: `order_sltoggle_${orderId}` },
 	]);
 
-	buttons.push([{ text: '⬅️ Back', callback_data: `order_view_${orderId}` }]);
+	buttons.push([{ text: '💨 Back', callback_data: `order_view_${orderId}` }]);
 
 	return { inline_keyboard: buttons };
 }
@@ -180,7 +180,7 @@ export function getOrderGasKeyboard(orderId: string): TelegramBot.InlineKeyboard
 
 	buttons.push([{ text: '✏️ Custom Gas', callback_data: `order_customgas_${orderId}` }]);
 
-	buttons.push([{ text: '⬅️ Back', callback_data: `order_view_${orderId}` }]);
+	buttons.push([{ text: '💨 Back', callback_data: `order_view_${orderId}` }]);
 
 	return { inline_keyboard: buttons };
 }
@@ -205,7 +205,7 @@ export function getOrderSlippageKeyboard(orderId: string): TelegramBot.InlineKey
 
 	buttons.push([{ text: '✏️ Custom Slippage', callback_data: `order_customslippage_${orderId}` }]);
 
-	buttons.push([{ text: '⬅️ Back', callback_data: `order_view_${orderId}` }]);
+	buttons.push([{ text: '💨 Back', callback_data: `order_view_${orderId}` }]);
 
 	return { inline_keyboard: buttons };
 }

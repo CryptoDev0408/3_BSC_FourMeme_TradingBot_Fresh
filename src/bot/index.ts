@@ -25,6 +25,19 @@ import {
 	showOrderDetail,
 	handleOrderCreate,
 	confirmOrderCreate,
+	handleOrderConfigAmount,
+	handleOrderSetConfigAmount,
+	handleOrderConfigAmountCustom,
+	handleOrderConfigSlippage,
+	handleOrderSetConfigSlippage,
+	handleOrderConfigTP,
+	handleOrderSetConfigTP,
+	handleOrderConfigTPCustom,
+	handleOrderConfigSL,
+	handleOrderSetConfigSL,
+	handleOrderConfigSLCustom,
+	handleOrderConfigCancel,
+	handleOrderConfigCreate,
 	handleOrderToggle,
 	handleOrderWalletSelection,
 	handleOrderSetWallet,
@@ -299,6 +312,52 @@ function setupCallbackHandlers(): void {
 				await handleOrderCreate(chatId, query.message?.message_id);
 			} else if (data === 'order_create_confirm') {
 				await confirmOrderCreate(chatId, query.message?.message_id);
+			} else if (data === 'order_config_amount') {
+				await handleOrderConfigAmount(chatId, query.message?.message_id);
+			} else if (data === 'order_config_amount_custom') {
+				await handleOrderConfigAmountCustom(chatId, query.message?.message_id);
+			} else if (data.startsWith('order_config_amount_')) {
+				const amount = parseFloat(data.replace('order_config_amount_', ''));
+				await handleOrderSetConfigAmount(chatId, amount, query.message?.message_id);
+			} else if (data === 'order_config_slippage') {
+				await handleOrderConfigSlippage(chatId, query.message?.message_id);
+			} else if (data.startsWith('order_config_slippage_')) {
+				const slippage = parseInt(data.replace('order_config_slippage_', ''));
+				await handleOrderSetConfigSlippage(chatId, slippage, query.message?.message_id);
+			} else if (data === 'order_config_tp') {
+				await handleOrderConfigTP(chatId, query.message?.message_id);
+			} else if (data === 'order_config_tp_toggle') {
+				await handleOrderSetConfigTP(chatId, 'toggle', query.message?.message_id);
+			} else if (data === 'order_config_tp_disabled') {
+				await bot.answerCallbackQuery(query.id, {
+					text: '❌ Take Profit is disabled. Enable it first to change percentage.',
+					show_alert: true,
+				});
+			} else if (data === 'order_config_tp_custom') {
+				await handleOrderConfigTPCustom(chatId, query.message?.message_id);
+			} else if (data.startsWith('order_config_tp_')) {
+				const percent = parseInt(data.replace('order_config_tp_', ''));
+				await handleOrderSetConfigTP(chatId, percent, query.message?.message_id);
+			} else if (data === 'order_config_sl') {
+				await handleOrderConfigSL(chatId, query.message?.message_id);
+			} else if (data === 'order_config_sl_toggle') {
+				await handleOrderSetConfigSL(chatId, 'toggle', query.message?.message_id);
+			} else if (data === 'order_config_sl_disabled') {
+				await bot.answerCallbackQuery(query.id, {
+					text: '❌ Stop Loss is disabled. Enable it first to change percentage.',
+					show_alert: true,
+				});
+			} else if (data === 'order_config_sl_custom') {
+				await handleOrderConfigSLCustom(chatId, query.message?.message_id);
+			} else if (data.startsWith('order_config_sl_')) {
+				const percent = parseInt(data.replace('order_config_sl_', ''));
+				await handleOrderSetConfigSL(chatId, percent, query.message?.message_id);
+			} else if (data === 'order_config_back') {
+				await handleOrderCreate(chatId, query.message?.message_id);
+			} else if (data === 'order_config_cancel') {
+				await handleOrderConfigCancel(chatId, query.message?.message_id);
+			} else if (data === 'order_config_create') {
+				await handleOrderConfigCreate(chatId, query.message?.message_id);
 			} else if (data.startsWith('order_view_')) {
 				const orderId = data.replace('order_view_', '');
 				await showOrderDetail(chatId, orderId, query.message?.message_id);
