@@ -161,9 +161,9 @@ export async function executeBuyOrder(
 
 		logger.success(`Swap successful! TX: ${swapResult.txHash}`);
 
-		// Calculate token amount received
-		logger.info(`Swap result amountOut: ${swapResult.amountOut} (type: ${typeof swapResult.amountOut})`);
-		const tokenAmountReceived = swapResult.amountOut ? parseFloat(swapResult.amountOut) : 0;
+		// Calculate token amount received (B_Trading returns 'tokenAmount' field)
+		logger.info(`Swap result tokenAmount: ${swapResult.tokenAmount} (type: ${typeof swapResult.tokenAmount})`);
+		const tokenAmountReceived = swapResult.tokenAmount ? parseFloat(swapResult.tokenAmount) : 0;
 
 		if (tokenAmountReceived === 0) {
 			logger.error(`❌ TOKEN AMOUNT IS ZERO! swapResult: ${JSON.stringify(swapResult)}`);

@@ -111,23 +111,17 @@ export class PNLMonitorEngine {
 				return;
 			}
 
-			// Sync memory with database - remove deleted positions
+			// Get memory positions and filter to only those that exist in DB
 			const dbPositionIds = new Set(dbPositions.map(p => p._id.toString()));
 			const memoryPositions = positionManager.getAllOpenPositions();
-			for (const memPos of memoryPositions) {
-				if (!dbPositionIds.has(memPos.id)) {
-					positionManager.removePosition(memPos.id);
-					logger.info(`🗑️ Removed deleted position from memory: ${memPos.id}`);
-				}
-			}
-
-			// Use memory positions (now synced with database)
-			const allPositions = positionManager.getAllOpenPositions();
+			const allPositions = memoryPositions.filter(p => dbPositionIds.has(p.id));
 
 			if (allPositions.length === 0) {
-				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No positions in memory after sync`);
+				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No positions in memory matching database`);
 				return;
 			}
+
+			console.log(`[${new Date().toLocaleTimeString()}] 📊 Checking ${allPositions.length} position(s)...`);
 
 			// Separate PENDING and ACTIVE positions
 			const pendingPositions = allPositions.filter(p => p.status === 'PENDING');
@@ -275,9 +269,20 @@ export class PNLMonitorEngine {
 			const pnlPercent = position.getPnLPercent();
 			const pnlBnb = position.getPnL();
 
-			// Check TP/SL triggers
-			const shouldTakeProfit = position.shouldTakeProfit();
-			const shouldStopLoss = position.shouldStopLoss();
+			// Get current order to check TP/SL settings (dynamic values)
+			const order = await Order.findById(position.orderId);
+			let shouldTakeProfit = false;
+			let shouldStopLoss = false;
+
+			if (order) {
+				// Check TP/SL with current order values
+				if (order.takeProfitEnabled && order.takeProfitPercent) {
+					shouldTakeProfit = pnlPercent >= order.takeProfitPercent;
+				}
+				if (order.stopLossEnabled && order.stopLossPercent) {
+					shouldStopLoss = pnlPercent <= -order.stopLossPercent;
+				}
+			}
 
 			return {
 				positionId: position.id,
@@ -334,9 +339,15 @@ export class PNLMonitorEngine {
 					const orderId = order._id.toString().substring(0, 8);
 					const pnlSign = p.pnlPercent >= 0 ? '+' : '';
 
+					// Get current TP/SL from order (dynamic values)
+					const currentTP = order.takeProfitPercent || 0;
+					const currentSL = order.stopLossPercent || 0;
+					const tpStatus = order.takeProfitEnabled ? 'ON' : 'OFF';
+					const slStatus = order.stopLossEnabled ? 'ON' : 'OFF';
+
 					console.log(
 						`[${username}] -> ${orderId}... -> ${walletAddr} -> ${p.tokenSymbol} (${position.token.address}) -> ` +
-						`TP: ${position.takeProfitPercent}%, SL: ${position.stopLossPercent}% -> ` +
+						`TP: ${currentTP}% (${tpStatus}), SL: ${currentSL}% (${slStatus}) -> ` +
 						`PNL: ${pnlSign}${p.pnlPercent.toFixed(2)}%`
 					);
 				} catch (error) {

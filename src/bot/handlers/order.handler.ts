@@ -92,8 +92,10 @@ export async function showOrdersList(chatId: string, messageId?: number): Promis
 			for (const order of orders) {
 				const status = order.isActive ? '🟢 Active' : '🔴 Inactive';
 				const walletName = (order.walletId as any)?.name || 'Unknown';
+				const walletAddress = (order.walletId as any)?.address || 'Unknown';
 				text += `${status} <b>${order.name}</b>\n`;
 				text += `💼 Wallet: ${walletName}\n`;
+				text += `📍 Address: <code>${walletAddress}</code>\n`;
 				text += `💰 Amount: ${formatBnb(order.tradingAmount)} BNB\n`;
 				text += `📊 Slippage: ${order.slippage}%\n\n`;
 			}
