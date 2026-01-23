@@ -8,3 +8,4 @@ export { Wallet, IWallet } from './wallet.model';
 export { Order, IOrder } from './order.model';
 export { Position, IPosition } from './position.model';
 export { Transaction, ITransaction } from './transaction.model';
+export { Token, IToken } from './token.model';

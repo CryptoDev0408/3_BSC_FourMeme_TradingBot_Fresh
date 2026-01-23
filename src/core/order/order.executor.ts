@@ -8,6 +8,10 @@ import { isValidAddress } from '../../utils/validation';
 import { PositionStatus, TransactionStatus, TransactionType } from '../../config/constants';
 import { ethers } from 'ethers';
 import mongoose from 'mongoose';
+import { tokenValidator } from '../token/token.validator';
+import { positionManager } from '../position/position.manager';
+import { B_Position } from '../classes/B_Position';
+import { B_Token } from '../classes/B_Token';
 
 /**
  * Order Executor
@@ -55,13 +59,23 @@ export async function executeBuyOrder(
 			};
 		}
 
+		// Validate token is on PancakeSwap V2
+		logger.info('Validating token on PancakeSwap V2...');
+		const validation = await tokenValidator.validateToken(tokenAddress);
+
+		if (!validation.isValid) {
+			return { success: false, error: validation.error || 'Token validation failed' };
+		}
+
+		if (!validation.token || !validation.pairAddress) {
+			return { success: false, error: 'Token validation incomplete' };
+		}
+
+		logger.success(`Token validated: ${validation.token.symbol} on PancakeSwap V2`);
+
 		// Get token metadata
 		logger.info('Fetching token metadata...');
-		const tokenMetadata = await getTokenMetadata(tokenAddress);
-
-		if (!tokenMetadata) {
-			return { success: false, error: 'Failed to fetch token metadata' };
-		}
+		const tokenMetadata = validation.token; // Use validated token metadata
 
 		// Get wallet with private key for signing
 		const walletWithKey = await getWalletWithPrivateKey(wallet._id.toString(), order.userId.toString());
@@ -104,15 +118,14 @@ export async function executeBuyOrder(
 			await Transaction.create({
 				userId: order.userId,
 				walletId: wallet._id,
-				orderId: order._id,
 				type: TransactionType.BUY,
 				status: TransactionStatus.FAILED,
 				tokenAddress,
 				tokenSymbol: tokenMetadata.symbol || 'UNKNOWN',
-				tokenName: tokenMetadata.name || 'Unknown Token',
-				bnbAmount: order.tradingAmount,
-				txHash: '',
-				error: swapResult.error || 'Unknown error',
+				amountBnb: order.tradingAmount,
+				gasFee: 0,
+				txHash: 'FAILED',
+				errorMessage: swapResult.error || 'Unknown error',
 			});
 
 			return {
@@ -126,8 +139,8 @@ export async function executeBuyOrder(
 		// Calculate token amount received
 		const tokenAmountReceived = swapResult.amountOut ? parseFloat(swapResult.amountOut) : 0;
 
-		// Create position
-		const position = await Position.create({
+		// Create position in database
+		const positionDoc = await Position.create({
 			userId: order.userId,
 			walletId: wallet._id,
 			orderId: order._id,
@@ -152,23 +165,51 @@ export async function executeBuyOrder(
 			stopLossTarget: order.stopLossPercent,
 		});
 
-		logger.success(`Position created: ${position._id}`);
+		logger.success(`Position created in DB: ${positionDoc._id}`);
+
+		// Create B_Token instance
+		const bToken = new B_Token({
+			address: tokenAddress,
+			symbol: tokenMetadata.symbol || 'UNKNOWN',
+			name: tokenMetadata.name || 'Unknown Token',
+			decimals: tokenMetadata.decimals || 18,
+		});
+
+		// Create B_Position instance and add to PositionManager
+		const bPosition = new B_Position({
+			id: positionDoc._id.toString(),
+			orderId: order._id.toString(),
+			userId: order.userId.toString(),
+			token: bToken,
+			tokenAmount: tokenAmountReceived,
+			bnbSpent: order.tradingAmount,
+			buyPrice: buyPriceInBnb,
+			currentPrice: buyPriceInBnb,
+			status: PositionStatus.ACTIVE,
+			buyTxHash: swapResult.txHash,
+			buyTimestamp: new Date(),
+			takeProfitPercent: order.takeProfitPercent,
+			stopLossPercent: order.stopLossPercent,
+			takeProfitEnabled: order.takeProfitEnabled,
+			stopLossEnabled: order.stopLossEnabled,
+		});
+
+		// Add to PositionManager (in-memory tracking)
+		positionManager.addPosition(bPosition);
+		logger.success(`Position added to PositionManager: ${bPosition.id}`);
 
 		// Log successful transaction
 		await Transaction.create({
 			userId: order.userId,
 			walletId: wallet._id,
-			orderId: order._id,
-			positionId: position._id,
+			positionId: positionDoc._id,
 			type: TransactionType.BUY,
 			status: TransactionStatus.SUCCESS,
 			tokenAddress,
 			tokenSymbol: tokenMetadata.symbol || 'UNKNOWN',
-			tokenName: tokenMetadata.name || 'Unknown Token',
-			bnbAmount: order.tradingAmount,
-			tokenAmount: tokenAmountReceived,
-			priceInBnb: buyPriceInBnb,
-			priceInUsd: buyPriceInUsd,
+			amountBnb: order.tradingAmount,
+			amountToken: tokenAmountReceived,
+			gasFee: swapResult.gasFee || 0,
 			txHash: swapResult.txHash,
 		});
 
@@ -176,7 +217,7 @@ export async function executeBuyOrder(
 			success: true,
 			txHash: swapResult.txHash,
 			tokenAddress,
-			positionId: position._id.toString(),
+			positionId: positionDoc._id.toString(),
 		};
 	} catch (error: any) {
 		logger.error('Failed to execute buy order:', error.message);
@@ -189,15 +230,14 @@ export async function executeBuyOrder(
 			await Transaction.create({
 				userId: order.userId,
 				walletId: wallet._id,
-				orderId: order._id,
 				type: TransactionType.BUY,
 				status: TransactionStatus.FAILED,
 				tokenAddress,
 				tokenSymbol: 'UNKNOWN',
-				tokenName: 'Unknown',
-				bnbAmount: order.tradingAmount,
-				txHash: '',
-				error: error.message,
+				amountBnb: order.tradingAmount,
+				gasFee: 0,
+				txHash: 'FAILED_' + Date.now(),
+				errorMessage: error.message,
 			});
 		} catch (logError) {
 			logger.error('Failed to log failed transaction:', logError);

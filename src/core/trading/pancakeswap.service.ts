@@ -23,6 +23,7 @@ export interface SwapResult {
 	success: boolean;
 	txHash?: string;
 	amountOut?: string;
+	gasFee?: number;
 	error?: string;
 }
 
@@ -530,10 +531,15 @@ export async function buyToken(
 
 		logger.success(`Buy transaction confirmed in block ${receipt.blockNumber}`);
 
+		// Calculate gas fee: gasUsed * gasPrice
+		const gasFeeWei = receipt.gasUsed.mul(receipt.effectiveGasPrice || txGasPrice);
+		const gasFeeInBnb = parseFloat(ethers.utils.formatEther(gasFeeWei));
+
 		return {
 			success: true,
 			txHash: tx.hash,
 			amountOut: amountOut.toString(),
+			gasFee: gasFeeInBnb,
 		};
 	} catch (error: any) {
 		logger.error('Failed to buy token:', error.message);

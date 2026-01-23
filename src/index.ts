@@ -3,6 +3,8 @@ import { database } from './database/connection';
 import { logger } from './utils/logger';
 import { initializeBot, stopBot } from './bot';
 import { initializeProvider } from './core/wallet';
+import { positionManager } from './core/position/position.manager';
+import { tpslMonitor } from './services/tpsl.monitor';
 
 /**
  * Main application entry point
@@ -45,6 +47,16 @@ async function main() {
 		logger.info('🔗 Connecting to BSC network...');
 		initializeProvider();
 
+		// Initialize Position Manager
+		logger.info('📊 Initializing Position Manager...');
+		await positionManager.initialize();
+		logger.success(`✅ Position Manager initialized (${positionManager.getOpenPositionCount()} open positions)`);
+
+		// Start TP/SL Monitor
+		logger.info('🎯 Starting TP/SL Monitor...');
+		tpslMonitor.start();
+		logger.success('✅ TP/SL Monitor started');
+
 		// Initialize Telegram Bot
 		await initializeBot();
 
@@ -59,6 +71,7 @@ async function main() {
 		// Graceful shutdown
 		process.on('SIGINT', async () => {
 			logger.info('📦 Shutting down gracefully...');
+			tpslMonitor.stop();
 			await stopBot();
 			await database.disconnect();
 			process.exit(0);

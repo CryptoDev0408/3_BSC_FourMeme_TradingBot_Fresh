@@ -392,6 +392,9 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('order_autobuy_toggle_')) {
 				const orderId = data.replace('order_autobuy_toggle_', '');
 				await handleAutoBuyToggle(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_manual_buy_')) {
+				const orderId = data.replace('order_manual_buy_', '');
+				await handleManualBuy(chatId, orderId, query.message?.message_id);
 			} else if (data.startsWith('order_wallet_')) {
 				const orderId = data.replace('order_wallet_', '');
 				await handleOrderWalletSelection(chatId, orderId, query.message?.message_id);

@@ -241,27 +241,28 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 				[
 					{ text: '📊 Slippage', callback_data: `order_slippage_label_${orderId}` },
 					{ text: `${order.slippage}%`, callback_data: `order_slippage_input_${orderId}` },
-				],
-				// Row 7: Auto Buy Toggle
-				[
-					{
-						text: order.autoBuy ? '✅ AutoBuy: ON' : '❌ AutoBuy: OFF',
-						callback_data: `order_autobuy_toggle_${orderId}`
-					},
-					...(order.autoBuy ? [] : [{ text: '🪙 Manual Buy', callback_data: `order_manual_${orderId}` }])
-				],
-				// Row 8: Back & Remove
-				[
-					{ text: '🛡️ Back to Orders', callback_data: 'orders' },
-					{ text: '🗑 Remove Order', callback_data: `order_remove_${orderId}` },
 				]
 			);
 		}
 
-		// For active orders, still show Back button at the end
-		if (order.isActive) {
-			keyboard.inline_keyboard.push([{ text: '🛡️ Back to Orders', callback_data: 'orders' }]);
-		}
+		// Auto Buy Toggle & Manual Buy (always shown regardless of order status)
+		keyboard.inline_keyboard.push(
+			[
+				{
+					text: order.autoBuy ? '✅ AutoBuy: ON' : '❌ AutoBuy: OFF',
+					callback_data: `order_autobuy_toggle_${orderId}`
+				},
+				...(order.autoBuy ? [] : [{ text: '🪙 Manual Buy', callback_data: `order_manual_buy_${orderId}` }])
+			]
+		);
+
+		// Back & Remove buttons (always last row)
+		keyboard.inline_keyboard.push(
+			[
+				{ text: '🛡️ Back to Orders', callback_data: 'orders' },
+				{ text: '🗑 Remove Order', callback_data: `order_remove_${orderId}` },
+			]
+		);
 
 		if (messageId) {
 			await getBot().editMessageText(text, {
@@ -2077,7 +2078,44 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 				return true;
 			}
 
-			await getBot().sendMessage(chatId, '⏳ Executing buy order...\n\nPlease wait...');
+			// Show validating message
+			const validatingMsg = await getBot().sendMessage(chatId, '⏳ Validating token...\n\nChecking PancakeSwap V2 pair...');
+
+			// Import token validator
+			const { tokenValidator } = await import('../../core/token/token.validator');
+
+			// Validate token first to get pair address
+			const tokenValidation = await tokenValidator.validateToken(text);
+
+			if (!tokenValidation.isValid) {
+				await getBot().editMessageText(
+					`❌ Token validation failed:\n\n${tokenValidation.error}`,
+					{ chat_id: chatId, message_id: validatingMsg.message_id }
+				);
+				userStates.delete(chatId);
+				return true;
+			}
+
+			// Show pair info
+			let pairInfoText = '✅ <b>Token Validated!</b>\n\n';
+			pairInfoText += `Token: <code>${text}</code>\n`;
+			if (tokenValidation.token) {
+				pairInfoText += `Name: ${tokenValidation.token.name}\n`;
+				pairInfoText += `Symbol: ${tokenValidation.token.symbol}\n`;
+			}
+			if (tokenValidation.pairAddress) {
+				pairInfoText += `\n📊 <b>PancakeSwap V2 Pair:</b>\n<code>${tokenValidation.pairAddress}</code>\n`;
+			}
+			if (tokenValidation.liquidityBnb !== undefined) {
+				pairInfoText += `💧 Liquidity: ${tokenValidation.liquidityBnb.toFixed(4)} BNB\n`;
+			}
+			pairInfoText += '\n⏳ Executing buy order...';
+
+			await getBot().editMessageText(pairInfoText, {
+				chat_id: chatId,
+				message_id: validatingMsg.message_id,
+				parse_mode: 'HTML'
+			});
 
 			// Get user
 			const user = await User.findOne({ chatId });
@@ -2117,8 +2155,14 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 			} else {
 				let successText = '✅ <b>Buy Successful!</b>\n\n';
 				successText += `Token: <code>${result.tokenAddress}</code>\n`;
-				successText += `TX: <code>${result.txHash}</code>\n\n`;
-				successText += `View on BSCScan:\nhttps://bscscan.com/tx/${result.txHash}`;
+				if (tokenValidation.token) {
+					successText += `Symbol: ${tokenValidation.token.symbol}\n`;
+				}
+				if (tokenValidation.pairAddress) {
+					successText += `\n📊 <b>Pair Address:</b>\n<code>${tokenValidation.pairAddress}</code>\n`;
+				}
+				successText += `\n💳 <b>Transaction:</b>\n<code>${result.txHash}</code>\n\n`;
+				successText += `🔗 View on BSCScan:\nhttps://bscscan.com/tx/${result.txHash}`;
 
 				await getBot().sendMessage(chatId, successText, { parse_mode: 'HTML' });
 			}
