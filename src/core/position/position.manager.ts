@@ -25,12 +25,28 @@ export class PositionManager {
 
 			// Load all open/active positions from database
 			const openPositions = await Position.find({ status: { $in: ['OPEN', 'ACTIVE'] } })
-				.populate('walletId');
+				.populate('walletId')
+				.populate('orderId'); // Populate order to get TP/SL enabled flags
 
 			for (const pos of openPositions) {
 				try {
 					// Note: Database already stores normalized token amount (not wei)
 					// The amount comes from swapResult which is already formatted by ethers.formatUnits()
+
+					// MIGRATION FIX: Old positions may have been double-normalized (very small values)
+					// If tokenAmount is suspiciously small (< 0.001), it's likely from old buggy code
+					// Multiply by 10^decimals to fix it
+					let tokenAmount = pos.tokenAmount;
+					if (tokenAmount < 0.001 && tokenAmount > 0) {
+						logger.warning(`⚠️ Position ${pos._id} has suspiciously small tokenAmount (${tokenAmount}), applying migration fix...`);
+						tokenAmount = tokenAmount * Math.pow(10, pos.tokenDecimals);
+						logger.info(`✅ Fixed tokenAmount: ${tokenAmount}`);
+					}
+
+					// Get order to read TP/SL enabled flags
+					const order = pos.orderId as any;
+					const takeProfitEnabled = order?.takeProfitEnabled !== undefined ? order.takeProfitEnabled : true;
+					const stopLossEnabled = order?.stopLossEnabled !== undefined ? order.stopLossEnabled : true;
 
 					const bPosition = new B_Position({
 						id: pos._id.toString(),
@@ -41,7 +57,7 @@ export class PositionManager {
 							symbol: pos.tokenSymbol,
 							decimals: pos.tokenDecimals,
 						}),
-						tokenAmount: pos.tokenAmount,  // Already normalized in DB
+						tokenAmount: tokenAmount,  // Use potentially fixed amount
 						bnbSpent: pos.buyAmount,
 						buyPrice: pos.buyPrice,
 						currentPrice: pos.currentPrice || pos.buyPrice,
@@ -50,8 +66,8 @@ export class PositionManager {
 						buyTimestamp: pos.buyTimestamp,
 						takeProfitPercent: pos.takeProfitTarget,
 						stopLossPercent: pos.stopLossTarget,
-						takeProfitEnabled: true,
-						stopLossEnabled: true,
+						takeProfitEnabled: takeProfitEnabled,  // Read from order
+						stopLossEnabled: stopLossEnabled,      // Read from order
 					});
 
 					this.positions.set(pos._id.toString(), bPosition);
