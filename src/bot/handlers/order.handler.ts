@@ -1974,8 +1974,8 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 		// Handle direct amount input
 		if (state.action === 'order_amount_input') {
 			const amount = parseFloat(text);
-			if (isNaN(amount) || amount < 0.001) {
-				await getBot().sendMessage(chatId, '❌ Invalid amount. Minimum is 0.001 BNB.');
+			if (isNaN(amount) || amount < 0.00001) {
+				await getBot().sendMessage(chatId, '❌ Invalid amount. Minimum is 0.00001 BNB.');
 				return true;
 			}
 

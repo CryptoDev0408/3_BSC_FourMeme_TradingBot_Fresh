@@ -162,7 +162,14 @@ export async function executeBuyOrder(
 		logger.success(`Swap successful! TX: ${swapResult.txHash}`);
 
 		// Calculate token amount received
+		logger.info(`Swap result amountOut: ${swapResult.amountOut} (type: ${typeof swapResult.amountOut})`);
 		const tokenAmountReceived = swapResult.amountOut ? parseFloat(swapResult.amountOut) : 0;
+
+		if (tokenAmountReceived === 0) {
+			logger.error(`❌ TOKEN AMOUNT IS ZERO! swapResult: ${JSON.stringify(swapResult)}`);
+		} else {
+			logger.success(`✅ Token amount received: ${tokenAmountReceived}`);
+		}
 
 		// Create position in database
 		const positionDoc = await Position.create({

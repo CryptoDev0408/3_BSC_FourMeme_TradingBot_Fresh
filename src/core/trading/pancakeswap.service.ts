@@ -471,13 +471,26 @@ export async function buyToken(
 		const path = [WBNB_ADDRESS, tokenAddress];
 		const deadline = Math.floor(Date.now() / 1000) + 600; // 10 minutes
 
+		// Get token decimals
+		const tokenContract = new ethers.Contract(
+			tokenAddress,
+			['function decimals() view returns (uint8)'],
+			provider
+		);
+		let tokenDecimals = 18; // Default to 18
+		try {
+			tokenDecimals = await tokenContract.decimals();
+		} catch (error) {
+			logger.warning('Failed to get token decimals, using default 18');
+		}
+
 		// Get expected output amount
 		const amounts = await router.getAmountsOut(bnbAmount, path);
 		const amountOut = amounts[1];
 		const amountOutMin = calculateMinAmountOut(amountOut, slippagePercent);
 
 		logger.info(
-			`Expected output: ${ethers.utils.formatUnits(amountOut, 18)} tokens (min: ${ethers.utils.formatUnits(amountOutMin, 18)})`
+			`Expected output: ${ethers.utils.formatUnits(amountOut, tokenDecimals)} tokens (min: ${ethers.utils.formatUnits(amountOutMin, tokenDecimals)})`
 		);
 
 		// Estimate gas
@@ -535,10 +548,13 @@ export async function buyToken(
 		const gasFeeWei = receipt.gasUsed.mul(receipt.effectiveGasPrice || txGasPrice);
 		const gasFeeInBnb = parseFloat(ethers.utils.formatEther(gasFeeWei));
 
+		// Format token amount with proper decimals
+		const tokenAmountFormatted = ethers.utils.formatUnits(amountOut, tokenDecimals);
+
 		return {
 			success: true,
 			txHash: tx.hash,
-			amountOut: amountOut.toString(),
+			amountOut: tokenAmountFormatted, // Now properly formatted with token decimals
 			gasFee: gasFeeInBnb,
 		};
 	} catch (error: any) {

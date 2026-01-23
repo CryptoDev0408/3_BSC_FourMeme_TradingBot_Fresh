@@ -1,6 +1,6 @@
 import { positionManager } from '../core/position/position.manager';
 import { B_Wallet } from '../core/classes/B_Wallet';
-import { Order, User } from '../database/models';
+import { Order, User, Position } from '../database/models';
 import { logger } from '../utils/logger';
 import { config } from '../config/config';
 import { bot } from '../bot';
@@ -101,11 +101,31 @@ export class PNLMonitorEngine {
 		const startTime = Date.now();
 
 		try {
-			// Get all open positions from memory (fast)
+			// Get all open positions from DATABASE (always fresh)
+			const dbPositions = await Position.find({
+				status: { $in: ['OPEN', 'ACTIVE'] }
+			}).populate('orderId');
+
+			if (dbPositions.length === 0) {
+				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No open positions to monitor`);
+				return;
+			}
+
+			// Sync memory with database - remove deleted positions
+			const dbPositionIds = new Set(dbPositions.map(p => p._id.toString()));
+			const memoryPositions = positionManager.getAllOpenPositions();
+			for (const memPos of memoryPositions) {
+				if (!dbPositionIds.has(memPos.id)) {
+					positionManager.removePosition(memPos.id);
+					logger.info(`🗑️ Removed deleted position from memory: ${memPos.id}`);
+				}
+			}
+
+			// Use memory positions (now synced with database)
 			const allPositions = positionManager.getAllOpenPositions();
 
 			if (allPositions.length === 0) {
-				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No open positions to monitor`);
+				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No positions in memory after sync`);
 				return;
 			}
 

@@ -93,8 +93,34 @@ export class B_Trading {
 			const receipt = await tx.wait();
 
 			if (receipt.status === 1) {
-				const tokenAmount = ethers.utils.formatUnits(expectedOut, token.decimals);
-				logger.success(`Buy successful! Got ${tokenAmount} ${token.symbol}`);
+				// Parse Transfer event to get actual tokens received
+				// Transfer event: Transfer(address indexed from, address indexed to, uint256 value)
+				const transferTopic = ethers.utils.id('Transfer(address,address,uint256)');
+
+				// Find the Transfer event where tokens are transferred TO our wallet
+				const transferLog = receipt.logs.find(
+					(log: any) => {
+						if (log.topics[0] !== transferTopic) return false;
+						if (log.address.toLowerCase() !== token.address.toLowerCase()) return false;
+						// Check if the recipient (topics[2]) is our wallet address
+						const recipient = ethers.utils.defaultAbiCoder.decode(['address'], log.topics[2])[0];
+						return recipient.toLowerCase() === wallet.address.toLowerCase();
+					}
+				);
+
+				let tokenAmount: string;
+				if (transferLog) {
+					// Decode the transfer amount from the log data
+					const transferAmount = ethers.BigNumber.from(transferLog.data);
+					tokenAmount = ethers.utils.formatUnits(transferAmount, token.decimals);
+					logger.success(`Buy successful! Got ${tokenAmount} ${token.symbol} (from Transfer event)`);
+				} else {
+					// Fallback to expected amount if Transfer event not found
+					tokenAmount = ethers.utils.formatUnits(expectedOut, token.decimals);
+					logger.warning(`Transfer event not found for wallet ${wallet.address}, using expected amount: ${tokenAmount} ${token.symbol}`);
+					logger.debug(`Receipt logs count: ${receipt.logs.length}, Token address: ${token.address}`);
+				}
+
 				return {
 					success: true,
 					txHash: tx.hash,

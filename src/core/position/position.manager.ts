@@ -50,7 +50,7 @@ export class PositionManager {
 
 					const bPosition = new B_Position({
 						id: pos._id.toString(),
-						orderId: pos.orderId.toString(),
+						orderId: order?._id?.toString() || pos.orderId.toString(), // Extract _id from populated order
 						userId: pos.userId.toString(),
 						token: new B_Token({
 							address: pos.tokenAddress,
