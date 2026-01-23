@@ -28,6 +28,7 @@ export class B_Position {
 	public stopLossPercent: number;
 	public takeProfitEnabled: boolean;
 	public stopLossEnabled: boolean;
+	public hasPendingSell: boolean = false; // Prevent duplicate sell transactions
 
 	constructor(data: {
 		id?: string;
@@ -52,17 +53,18 @@ export class B_Position {
 		this.orderId = data.orderId;
 		this.userId = data.userId;
 		this.token = data.token;
-		this.tokenAmount = data.tokenAmount;
-		this.bnbSpent = data.bnbSpent;
-		this.buyPrice = data.buyPrice;
-		this.currentPrice = data.currentPrice || data.buyPrice;
+		// Ensure tokenAmount is always a number (handle string from DB)
+		this.tokenAmount = typeof data.tokenAmount === 'string' ? parseFloat(data.tokenAmount) : data.tokenAmount;
+		this.bnbSpent = typeof data.bnbSpent === 'string' ? parseFloat(data.bnbSpent) : data.bnbSpent;
+		this.buyPrice = typeof data.buyPrice === 'string' ? parseFloat(data.buyPrice) : data.buyPrice;
+		this.currentPrice = data.currentPrice ? (typeof data.currentPrice === 'string' ? parseFloat(data.currentPrice) : data.currentPrice) : this.buyPrice;
 		this.status = data.status || PositionStatus.ACTIVE;
 		this.buyTxHash = data.buyTxHash;
 		this.sellTxHash = data.sellTxHash;
 		this.buyTimestamp = data.buyTimestamp || new Date();
 		this.sellTimestamp = data.sellTimestamp;
-		this.takeProfitPercent = data.takeProfitPercent;
-		this.stopLossPercent = data.stopLossPercent;
+		this.takeProfitPercent = typeof data.takeProfitPercent === 'string' ? parseFloat(data.takeProfitPercent) : data.takeProfitPercent;
+		this.stopLossPercent = typeof data.stopLossPercent === 'string' ? parseFloat(data.stopLossPercent) : data.stopLossPercent;
 		this.takeProfitEnabled = data.takeProfitEnabled;
 		this.stopLossEnabled = data.stopLossEnabled;
 	}

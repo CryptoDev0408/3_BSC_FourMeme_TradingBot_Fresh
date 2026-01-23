@@ -343,10 +343,20 @@ export class PNLMonitorEngine {
 				return false;
 			}
 
+			// Check if already has pending sell transaction
+			if (position.hasPendingSell) {
+				logger.debug(`Position ${positionId} already has pending sell, skipping...`);
+				return false;
+			}
+
+			// Mark as having pending sell to prevent duplicate transactions
+			position.hasPendingSell = true;
+
 			// Get order
 			const order = await Order.findById(position.orderId);
 			if (!order) {
 				logger.error(`Order not found for position: ${positionId}`);
+				position.hasPendingSell = false; // Clear flag on error
 				return false;
 			}
 
@@ -354,6 +364,7 @@ export class PNLMonitorEngine {
 			const wallet = await B_Wallet.getById(order.walletId.toString());
 			if (!wallet) {
 				logger.error(`Wallet not found for position: ${positionId}`);
+				position.hasPendingSell = false; // Clear flag on error
 				return false;
 			}
 
@@ -367,6 +378,7 @@ export class PNLMonitorEngine {
 				logger.debug(`Wallet ethers instance created successfully for ${ethersWallet.address}`);
 			} catch (walletError: any) {
 				logger.error(`Failed to access wallet: ${walletError.message}`);
+				position.hasPendingSell = false; // Clear flag on error
 				await this.notifyError(order, position, `Wallet access failed: ${walletError.message}`);
 				return false;
 			}
@@ -386,11 +398,13 @@ export class PNLMonitorEngine {
 
 				if (actualBalance.isZero()) {
 					logger.error('Token balance is zero, cannot sell');
+					position.hasPendingSell = false; // Clear flag - nothing to sell
 					await this.notifyError(order, position, 'Token balance is zero');
 					return false;
 				}
 			} catch (balanceError: any) {
 				logger.error(`Failed to get token balance: ${balanceError.message}`);
+				position.hasPendingSell = false; // Clear flag on error
 				await this.notifyError(order, position, `Failed to get token balance: ${balanceError.message}`);
 				return false;
 			}
@@ -423,6 +437,7 @@ export class PNLMonitorEngine {
 			if (!sellResult.success) {
 				const errorMsg = sellResult.error || 'Unknown error';
 				logger.error(`❌ Sell failed: ${errorMsg}`);
+				position.hasPendingSell = false; // Clear flag on failure
 				await this.notifyError(order, position, `Sell failed: ${errorMsg}`);
 				return false;
 			}
@@ -430,6 +445,7 @@ export class PNLMonitorEngine {
 			// Verify transaction was actually executed
 			if (!sellResult.txHash) {
 				logger.error('❌ No transaction hash returned');
+				position.hasPendingSell = false; // Clear flag on failure
 				await this.notifyError(order, position, 'No transaction hash returned');
 				return false;
 			}
@@ -441,12 +457,14 @@ export class PNLMonitorEngine {
 
 				if (!receipt) {
 					logger.error('❌ Transaction receipt not found');
+					position.hasPendingSell = false; // Clear flag on failure
 					await this.notifyError(order, position, 'Transaction receipt not found');
 					return false;
 				}
 
 				if (receipt.status !== 1) {
 					logger.error('❌ Transaction reverted (status = 0)');
+					position.hasPendingSell = false; // Clear flag on failure
 					await this.notifyError(order, position, 'Transaction reverted');
 					return false;
 				}
@@ -477,9 +495,15 @@ export class PNLMonitorEngine {
 			await this.notifySell(order, position, reason, sellResult.txHash!);
 
 			logger.success(`${reason} executed for position ${positionId}`);
+			// Note: hasPendingSell flag is cleared when position is removed from memory
 			return true;
 		} catch (error: any) {
 			logger.error(`Sell execution failed: ${error.message}`);
+			// Clear flag on error
+			const position = positionManager.getPosition(positionId);
+			if (position) {
+				position.hasPendingSell = false;
+			}
 			return false;
 		}
 	}

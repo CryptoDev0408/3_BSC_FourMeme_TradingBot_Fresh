@@ -192,8 +192,8 @@ export async function executeBuyOrder(
 
 		logger.success(`Position created in DB: ${positionDoc._id}`);
 
-		// Normalize token amount (database stores raw, but B_Position needs actual count)
-		const actualTokenAmount = tokenAmountReceived / Math.pow(10, tokenMetadata.decimals || 18);
+		// Note: tokenAmountReceived is already formatted (not in wei)
+		// No need to normalize again - swapResult.amountOut is already human-readable
 
 		// Create B_Position instance and add to PositionManager
 		const bPosition = new B_Position({
@@ -201,7 +201,7 @@ export async function executeBuyOrder(
 			orderId: order._id.toString(),
 			userId: order.userId.toString(),
 			token: bToken,
-			tokenAmount: actualTokenAmount,  // Use normalized amount
+			tokenAmount: tokenAmountReceived,  // Already normalized from swapResult
 			bnbSpent: order.tradingAmount,
 			buyPrice: buyPriceInBnb,
 			currentPrice: buyPriceInBnb,

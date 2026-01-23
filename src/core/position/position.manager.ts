@@ -29,9 +29,8 @@ export class PositionManager {
 
 			for (const pos of openPositions) {
 				try {
-					// Normalize token amount by dividing by 10^decimals
-					// Database stores raw amount, but we need actual token count for PNL calculation
-					const actualTokenAmount = pos.tokenAmount / Math.pow(10, pos.tokenDecimals);
+					// Note: Database already stores normalized token amount (not wei)
+					// The amount comes from swapResult which is already formatted by ethers.formatUnits()
 
 					const bPosition = new B_Position({
 						id: pos._id.toString(),
@@ -42,7 +41,7 @@ export class PositionManager {
 							symbol: pos.tokenSymbol,
 							decimals: pos.tokenDecimals,
 						}),
-						tokenAmount: actualTokenAmount,
+						tokenAmount: pos.tokenAmount,  // Already normalized in DB
 						bnbSpent: pos.buyAmount,
 						buyPrice: pos.buyPrice,
 						currentPrice: pos.currentPrice || pos.buyPrice,

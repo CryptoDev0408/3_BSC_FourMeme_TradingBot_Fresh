@@ -79,13 +79,13 @@ async function main() {
 		logger.info('⚡ PNL Monitor: ' + (config.monitoring.pnlMonitorInterval / 1000) + 's interval (High-Performance)');
 		logger.info('📊 Position Monitor: ' + (config.monitoring.positionMonitorInterval / 1000) + 's interval (Legacy)');
 		logger.info('🔍 Scanner Status: ' + (config.monitoring.scannerEnabled ? 'Enabled' : 'Disabled'));
-		logger.info('');
-		await transactionQueue.stop();
 		logger.info('✨ Try /start in Telegram to begin!');
+		logger.info('');
 
 		// Graceful shutdown
 		process.on('SIGINT', async () => {
 			logger.info('📦 Shutting down gracefully...');
+			await transactionQueue.stop();
 			pnlMonitorEngine.stop();
 			tpslMonitor.stop();
 			await stopBot();
