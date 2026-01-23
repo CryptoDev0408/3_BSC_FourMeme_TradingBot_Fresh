@@ -12,9 +12,10 @@ export function getMainMenuKeyboard(): InlineKeyboardMarkup {
 			],
 			[
 				{ text: '💰 Positions', callback_data: 'positions' },
-				{ text: '🔍 Scanner', callback_data: 'scanner' },
+				{ text: '� Transactions', callback_data: 'transactions' },
 			],
 			[
+				{ text: '🔍 Scanner', callback_data: 'scanner' },
 				{ text: 'ℹ️ Help', callback_data: 'help' },
 			],
 		],

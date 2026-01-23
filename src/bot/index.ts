@@ -77,6 +77,11 @@ import {
 	handlePositionSell,
 	setBotInstance as setPositionBotInstance,
 } from './handlers/position.handler';
+import {
+	showTransactionsList,
+	showFilteredTransactions,
+	setBotInstance as setTransactionBotInstance,
+} from './handlers/transaction.handler';
 
 /**
  * Telegram Bot Instance
@@ -98,6 +103,7 @@ export async function initializeBot(): Promise<void> {
 		setWalletBotInstance(bot);
 		setOrderBotInstance(bot);
 		setPositionBotInstance(bot);
+		setTransactionBotInstance(bot);
 
 		// Setup handlers
 		setupCommandHandlers();
@@ -536,6 +542,11 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('position_sell_')) {
 				const positionId = data.replace('position_sell_', '');
 				await handlePositionSell(chatId, positionId, query.message?.message_id);
+			} else if (data === 'transactions') {
+				await showTransactionsList(chatId, query.message?.message_id);
+			} else if (data.startsWith('txs_filter_')) {
+				const filter = data.replace('txs_filter_', '') as 'buy' | 'sell' | 'success' | 'failed';
+				await showFilteredTransactions(chatId, filter, query.message?.message_id);
 			} else if (data === 'scanner') {
 				if (query.message?.message_id) {
 					await bot.deleteMessage(chatId, query.message.message_id);

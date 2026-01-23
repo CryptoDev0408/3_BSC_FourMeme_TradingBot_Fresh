@@ -333,6 +333,11 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		position.pnlPercent = finalPnlPercent;
 		await position.save();
 
+		// Remove position from PositionManager (in-memory tracking)
+		const { positionManager } = await import('../../core/position/position.manager');
+		positionManager.removePosition(position._id.toString());
+		logger.info(`Position removed from PositionManager: ${position._id}`);
+
 		// Log successful transaction
 		await Transaction.create({
 			userId: user._id,
