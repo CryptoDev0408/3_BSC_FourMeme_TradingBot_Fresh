@@ -267,8 +267,11 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 			]
 		);
 
-		// Back & Remove buttons (always last row)
+		// Refresh, Back & Remove buttons (always last row)
 		keyboard.inline_keyboard.push(
+			[
+				{ text: '🔄 Refresh', callback_data: `order_view_${orderId}` },
+			],
 			[
 				{ text: '🛡️ Back to Orders', callback_data: 'orders' },
 				{ text: '🗑 Remove Order', callback_data: `order_remove_${orderId}` },
@@ -343,11 +346,9 @@ export async function showOrderPositions(chatId: string, orderId: string, messag
 		// Add row for each active position: [Token Name] [Sell]
 		if (activePositions.length > 0) {
 			for (const pos of activePositions) {
-				const pnlEmoji = pos.pnlPercent >= 0 ? '📈' : '📉';
-				const pnlSign = pos.pnlPercent >= 0 ? '+' : '';
 				keyboard.inline_keyboard.push([
 					{
-						text: `${pnlEmoji} ${pos.tokenSymbol} (${pnlSign}${formatPercent(pos.pnlPercent)}%)`,
+						text: `${pos.tokenSymbol}`,
 						callback_data: `position_view_${pos._id}`,
 					},
 					{
@@ -361,21 +362,20 @@ export async function showOrderPositions(chatId: string, orderId: string, messag
 		// Add closed positions (view only)
 		if (closedPositions.length > 0) {
 			for (const pos of closedPositions) {
-				const pnlEmoji = pos.pnlPercent >= 0 ? '📈' : '📉';
-				const pnlSign = pos.pnlPercent >= 0 ? '+' : '';
 				keyboard.inline_keyboard.push([
 					{
-						text: `${pnlEmoji} ${pos.tokenSymbol} (${pnlSign}${formatPercent(pos.pnlPercent)}%) - CLOSED`,
+						text: `${pos.tokenSymbol} - CLOSED`,
 						callback_data: `position_view_${pos._id}`,
 					},
 				]);
 			}
 		}
 
-		// Back button
-		keyboard.inline_keyboard.push([
-			{ text: '◀️ Back to Order', callback_data: `order_view_${orderId}` },
-		]);
+		// Refresh & Back buttons
+		keyboard.inline_keyboard.push(
+			[{ text: '🔄 Refresh', callback_data: `order_positions_${orderId}` }],
+			[{ text: '◀️ Back to Order', callback_data: `order_view_${orderId}` }]
+		);
 
 		if (messageId) {
 			await getBot().editMessageText(text, {
@@ -2296,10 +2296,23 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 					}
 				}
 
-				successText += `\n💳 <b>Transaction Hash:</b>\n<code>${result.txHash}</code>\n\n`;
-				successText += `🔗 <a href="https://bscscan.com/tx/${result.txHash}">View on BSCScan</a>`;
+				successText += `\n💳 <b>TX:</b> <code>${result.txHash}</code>`;
 
-				await getBot().sendMessage(chatId, successText, { parse_mode: 'HTML', disable_web_page_preview: true });
+				const keyboard = {
+					inline_keyboard: [
+						[
+							{ text: '📊 Dexscreener', url: `https://dexscreener.com/bsc/${result.tokenAddress}?maker=${wallet.address}` },
+							{ text: '🔍 BSCScan', url: `https://bscscan.com/tx/${result.txHash}` },
+						],
+						[{ text: '🔙 Back to Order', callback_data: `order_view_${state.orderId}` }],
+					],
+				};
+
+				await getBot().sendMessage(chatId, successText, {
+					parse_mode: 'HTML',
+					disable_web_page_preview: true,
+					reply_markup: keyboard
+				});
 			}
 
 			// Clear state

@@ -118,7 +118,7 @@ export class TokenValidator {
 			if (pairAddress === ethers.constants.AddressZero) {
 				return {
 					isValid: false,
-					error: 'Token does not have a PancakeSwap V2 pair with BNB',
+					error: '⚠️ HIGH RISK: No PancakeSwap V2 pair found! Token may be V3 only, honeypot, or potential rug.',
 				};
 			}
 

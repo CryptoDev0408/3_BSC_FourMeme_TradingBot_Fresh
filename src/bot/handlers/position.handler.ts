@@ -352,7 +352,7 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 
 		// Queue the transaction
 		const txId = transactionQueue.push(transaction);
-		logger.info(`🎯 Manual sell transaction queued: ${txId}`);
+		logger.info(`🎯 Queued: ${txId}`);
 
 		// Wait for completion
 		const sellResult = await waitForTxComplete(transaction, 120000);
@@ -403,7 +403,7 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 			sellPrice,
 			sellResult.txHash
 		);
-		logger.info(`Position closed and deleted: ${position._id}`);
+		logger.info(`✅ Position closed: ${position._id}`);
 
 		// Log successful transaction
 		await Transaction.create({
@@ -431,18 +431,28 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		let successText = `✅ <b>Sell Successful!</b>\n\n`;
 		successText += `🪙 <b>Token:</b> ${position.tokenSymbol}\n`;
 		successText += `📍 <code>${position.tokenAddress}</code>\n\n`;
-		successText += `💰 <b>Sold Amount:</b> ${position.tokenAmount.toFixed(2)} tokens\n`;
-		successText += `💵 <b>BNB Received:</b> ${bnbReceived.toFixed(6)} BNB\n`;
-		successText += `⛽ <b>Gas Fee:</b> ${(sellResult.gasFee || 0).toFixed(6)} BNB\n\n`;
-		successText += `${pnlEmoji} <b>Final PNL:</b> ${pnlSign}${finalPnlPercent.toFixed(2)}% (${pnlSign}${finalPnlBnb.toFixed(6)} BNB)\n\n`;
-		successText += `💳 <b>Transaction Hash:</b>\n<code>${sellResult.txHash}</code>\n\n`;
-		successText += `🔗 <a href="https://bscscan.com/tx/${sellResult.txHash}">View on BSCScan</a>`;
+		successText += `💰 <b>Sold:</b> ${position.tokenAmount.toFixed(2)} tokens\n`;
+		successText += `💵 <b>Received:</b> ${bnbReceived.toFixed(6)} BNB\n`;
+		successText += `⛽ <b>Gas:</b> ${(sellResult.gasFee || 0).toFixed(6)} BNB\n\n`;
+		successText += `${pnlEmoji} <b>PNL:</b> ${pnlSign}${finalPnlPercent.toFixed(2)}% (${pnlSign}${finalPnlBnb.toFixed(6)} BNB)\n\n`;
+		successText += `💳 <b>TX:</b> <code>${sellResult.txHash}</code>`;
+
+		const keyboard = {
+			inline_keyboard: [
+				[
+					{ text: '📊 Dexscreener', url: `https://dexscreener.com/bsc/${position.tokenAddress}?maker=${wallet.address}` },
+					{ text: '🔍 BSCScan', url: `https://bscscan.com/tx/${sellResult.txHash}` },
+				],
+				[{ text: '🔙 Back to Order', callback_data: `order_view_${order._id}` }],
+			],
+		};
 
 		await getBot().editMessageText(successText, {
 			chat_id: chatId,
 			message_id: processingMsg.message_id,
 			parse_mode: 'HTML',
 			disable_web_page_preview: true,
+			reply_markup: keyboard,
 		});
 
 		logger.success(`Position sold successfully: ${position.tokenSymbol} - PNL: ${pnlSign}${finalPnlPercent.toFixed(2)}%`);

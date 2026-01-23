@@ -223,7 +223,7 @@ export class PNLMonitorEngine {
 				const balanceNumber = parseFloat(balanceFormatted);
 
 				if (balanceNumber > 0) {
-					logger.success(`✅ PENDING position ${position.id} confirmed! Balance: ${balanceFormatted} ${position.token.symbol}`);
+					logger.success(`✅ ${position.token.symbol}: ${balanceFormatted} tokens confirmed`);
 
 					// Update position in database
 					await Position.findByIdAndUpdate(position.id, {
@@ -563,7 +563,7 @@ export class PNLMonitorEngine {
 					return false;
 				}
 
-				logger.success(`✅ Transaction confirmed in block ${receipt.blockNumber}`);
+				logger.success(`✅ TX confirmed: Block #${receipt.blockNumber}`);
 			} catch (receiptError: any) {
 				logger.error(`Failed to verify transaction receipt: ${receiptError.message}`);
 				// Continue anyway since transaction queue reported success
@@ -582,13 +582,13 @@ export class PNLMonitorEngine {
 			if (stillExists) {
 				logger.error(`⚠️ Position ${positionId} still exists in memory after close!`);
 			} else {
-				logger.success(`✅ Position ${positionId} removed from memory`);
+				logger.success(`✅ Position closed: ${positionId}`);
 			}
 
 			// Send notification
 			await this.notifySell(order, position, reason, sellResult.txHash!);
 
-			logger.success(`${reason} executed for position ${positionId}`);
+			logger.success(`✅ ${reason} executed: ${positionId}`);
 			// Note: hasPendingSell flag is cleared when position is removed from memory
 			return true;
 		} catch (error: any) {

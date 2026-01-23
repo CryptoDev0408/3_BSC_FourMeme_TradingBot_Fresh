@@ -41,7 +41,7 @@ export async function executeBuyOrder(
 	tokenAddress: string
 ): Promise<ExecutionResult> {
 	try {
-		logger.info(`Executing buy order: ${order._id} for token: ${tokenAddress}`);
+		logger.info(`🛍️ Buy: ${order.tradingAmount} BNB -> ${tokenAddress}`);
 
 		// Validate token address
 		if (!isValidAddress(tokenAddress)) {
@@ -62,7 +62,6 @@ export async function executeBuyOrder(
 		}
 
 		// Validate token is on PancakeSwap V2
-		logger.info('Validating token on PancakeSwap V2...');
 		const validation = await tokenValidator.validateToken(tokenAddress);
 
 		if (!validation.isValid) {
@@ -76,7 +75,6 @@ export async function executeBuyOrder(
 		logger.success(`Token validated: ${validation.token.symbol} on PancakeSwap V2`);
 
 		// Get token metadata
-		logger.info('Fetching token metadata...');
 		const tokenMetadata = validation.token; // Use validated token metadata
 
 		// Get wallet with private key for signing
@@ -99,9 +97,7 @@ export async function executeBuyOrder(
 		}
 
 		// Execute the swap via transaction queue
-		logger.info(
-			`Buying ${order.tradingAmount} BNB worth of ${tokenMetadata.symbol} with ${order.slippage}% slippage...`
-		);
+		logger.info(`💰 ${order.tradingAmount} BNB -> ${tokenMetadata.symbol} (${order.slippage}% slippage)`);
 
 		// Create B_Wallet instance
 		const bWallet = await B_Wallet.getById(wallet._id.toString());
@@ -133,7 +129,7 @@ export async function executeBuyOrder(
 
 		// Queue the transaction
 		const txId = transactionQueue.push(transaction);
-		logger.info(`🎯 Buy transaction queued: ${txId}`);
+		logger.info(`🎯 Queued: ${txId}`);
 
 		// Wait for transaction to complete (with timeout)
 		const swapResult = await waitForTransactionComplete(transaction, 120000); // 120 second timeout
@@ -162,7 +158,6 @@ export async function executeBuyOrder(
 		logger.success(`Swap successful! TX: ${swapResult.txHash}`);
 
 		// Calculate token amount received (B_Trading returns 'tokenAmount' field)
-		logger.info(`Swap result tokenAmount: ${swapResult.tokenAmount} (type: ${typeof swapResult.tokenAmount})`);
 		const tokenAmountReceived = swapResult.tokenAmount ? parseFloat(swapResult.tokenAmount) : 0;
 
 		if (tokenAmountReceived === 0) {
