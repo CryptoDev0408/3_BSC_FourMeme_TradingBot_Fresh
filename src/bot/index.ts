@@ -71,6 +71,12 @@ import {
 	clearOrderState,
 	setBotInstance as setOrderBotInstance,
 } from './handlers/order.handler';
+import {
+	showPositionsList,
+	showPositionDetail,
+	handlePositionSell,
+	setBotInstance as setPositionBotInstance,
+} from './handlers/position.handler';
 
 /**
  * Telegram Bot Instance
@@ -91,6 +97,7 @@ export async function initializeBot(): Promise<void> {
 		// Initialize bot instance in handlers to avoid circular dependency
 		setWalletBotInstance(bot);
 		setOrderBotInstance(bot);
+		setPositionBotInstance(bot);
 
 		// Setup handlers
 		setupCommandHandlers();
@@ -392,6 +399,10 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('order_autobuy_toggle_')) {
 				const orderId = data.replace('order_autobuy_toggle_', '');
 				await handleAutoBuyToggle(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_positions_')) {
+				const orderId = data.replace('order_positions_', '');
+				const { showOrderPositions } = await import('./handlers/order.handler');
+				await showOrderPositions(chatId, orderId, query.message?.message_id);
 			} else if (data.startsWith('order_manual_buy_')) {
 				const orderId = data.replace('order_manual_buy_', '');
 				await handleManualBuy(chatId, orderId, query.message?.message_id);
@@ -514,12 +525,17 @@ function setupCallbackHandlers(): void {
 				if (query.message?.message_id) {
 					await bot.deleteMessage(chatId, query.message.message_id);
 				}
-				await bot.sendMessage(chatId, '💰 <b>Position Management</b>\n\n⏳ Coming soon in next steps...', {
-					parse_mode: 'HTML',
-					reply_markup: {
-						inline_keyboard: [[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]],
-					},
-				});
+				await showPositionsList(chatId);
+			} else if (data.startsWith('position_view_')) {
+				const positionId = data.replace('position_view_', '');
+				await showPositionDetail(chatId, positionId, query.message?.message_id);
+			} else if (data.startsWith('position_refresh_')) {
+				const positionId = data.replace('position_refresh_', '');
+				// Refresh the position view
+				await showPositionDetail(chatId, positionId, query.message?.message_id);
+			} else if (data.startsWith('position_sell_')) {
+				const positionId = data.replace('position_sell_', '');
+				await handlePositionSell(chatId, positionId, query.message?.message_id);
 			} else if (data === 'scanner') {
 				if (query.message?.message_id) {
 					await bot.deleteMessage(chatId, query.message.message_id);

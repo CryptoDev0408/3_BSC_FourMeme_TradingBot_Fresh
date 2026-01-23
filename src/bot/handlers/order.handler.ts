@@ -245,6 +245,15 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 			);
 		}
 
+		// Positions row (only show if order has positions)
+		const { Position } = await import('../../database/models');
+		const positionsCount = await Position.countDocuments({ orderId, userId: user._id });
+		if (positionsCount > 0) {
+			keyboard.inline_keyboard.push(
+				[{ text: '💰 Positions', callback_data: `order_positions_${orderId}` }]
+			);
+		}
+
 		// Auto Buy Toggle & Manual Buy (always shown regardless of order status)
 		keyboard.inline_keyboard.push(
 			[
@@ -280,6 +289,108 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 	} catch (error: any) {
 		logger.error('Failed to show order detail:', error.message);
 		await getBot().sendMessage(chatId, '❌ Failed to load order details.');
+	}
+}
+
+/**
+ * Show positions for a specific order
+ */
+export async function showOrderPositions(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		// Get user
+		const user = await User.findOne({ chatId });
+		if (!user) {
+			await getBot().sendMessage(chatId, '❌ User not found.');
+			return;
+		}
+
+		// Get order
+		const order = await getOrderById(orderId, user._id.toString());
+		if (!order) {
+			await getBot().sendMessage(chatId, '❌ Order not found.');
+			return;
+		}
+
+		// Get positions for this order
+		const { Position } = await import('../../database/models');
+		const { PositionStatus } = await import('../../config/constants');
+		const { formatBnb, formatPercent } = await import('../../utils/formatter');
+
+		const positions = await Position.find({ orderId, userId: user._id })
+			.sort({ createdAt: -1 })
+			.exec();
+
+		const activePositions = positions.filter((p) => p.status === PositionStatus.ACTIVE);
+		const closedPositions = positions.filter((p) => p.status !== PositionStatus.ACTIVE);
+
+		let text = `💰 <b>Positions for Order: ${order.name}</b>\n\n`;
+
+		if (positions.length === 0) {
+			text += '📭 No positions yet.\n\n';
+			text += 'Use "🪙 Manual Buy" to open positions with this order.';
+		} else {
+			text += `🟢 Active: ${activePositions.length} | 🔴 Closed: ${closedPositions.length}\n\n`;
+			text += 'Click a token to view details or sell:';
+		}
+
+		// Create keyboard with token buttons
+		const keyboard: TelegramBot.InlineKeyboardMarkup = {
+			inline_keyboard: [],
+		};
+
+		// Add row for each active position: [Token Name] [Sell]
+		if (activePositions.length > 0) {
+			for (const pos of activePositions) {
+				const pnlEmoji = pos.pnlPercent >= 0 ? '📈' : '📉';
+				const pnlSign = pos.pnlPercent >= 0 ? '+' : '';
+				keyboard.inline_keyboard.push([
+					{
+						text: `${pnlEmoji} ${pos.tokenSymbol} (${pnlSign}${formatPercent(pos.pnlPercent)}%)`,
+						callback_data: `position_view_${pos._id}`,
+					},
+					{
+						text: `🔴 Sell`,
+						callback_data: `position_sell_${pos._id}`,
+					},
+				]);
+			}
+		}
+
+		// Add closed positions (view only)
+		if (closedPositions.length > 0) {
+			for (const pos of closedPositions) {
+				const pnlEmoji = pos.pnlPercent >= 0 ? '📈' : '📉';
+				const pnlSign = pos.pnlPercent >= 0 ? '+' : '';
+				keyboard.inline_keyboard.push([
+					{
+						text: `${pnlEmoji} ${pos.tokenSymbol} (${pnlSign}${formatPercent(pos.pnlPercent)}%) - CLOSED`,
+						callback_data: `position_view_${pos._id}`,
+					},
+				]);
+			}
+		}
+
+		// Back button
+		keyboard.inline_keyboard.push([
+			{ text: '◀️ Back to Order', callback_data: `order_view_${orderId}` },
+		]);
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: keyboard,
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to show order positions:', error.message);
+		await getBot().sendMessage(chatId, '❌ Failed to load positions.');
 	}
 }
 
@@ -2153,18 +2264,40 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 			if (!result.success) {
 				await getBot().sendMessage(chatId, `❌ Buy failed:\n\n${result.error}`);
 			} else {
+				// Fetch transaction details from database
+				const { Transaction } = await import('../../database/models');
+				const transaction = await Transaction.findOne({ txHash: result.txHash }).sort({ createdAt: -1 });
+
 				let successText = '✅ <b>Buy Successful!</b>\n\n';
-				successText += `Token: <code>${result.tokenAddress}</code>\n`;
+				successText += `🪙 <b>Token:</b> <code>${result.tokenAddress}</code>\n`;
 				if (tokenValidation.token) {
-					successText += `Symbol: ${tokenValidation.token.symbol}\n`;
+					successText += `📛 <b>Symbol:</b> ${tokenValidation.token.symbol}\n`;
+					successText += `📝 <b>Name:</b> ${tokenValidation.token.name}\n`;
 				}
+
 				if (tokenValidation.pairAddress) {
 					successText += `\n📊 <b>Pair Address:</b>\n<code>${tokenValidation.pairAddress}</code>\n`;
 				}
-				successText += `\n💳 <b>Transaction:</b>\n<code>${result.txHash}</code>\n\n`;
-				successText += `🔗 View on BSCScan:\nhttps://bscscan.com/tx/${result.txHash}`;
 
-				await getBot().sendMessage(chatId, successText, { parse_mode: 'HTML' });
+				if (tokenValidation.liquidityBnb !== undefined) {
+					successText += `💧 <b>Liquidity:</b> ${tokenValidation.liquidityBnb.toFixed(4)} BNB\n`;
+				}
+
+				// Add transaction details if found
+				if (transaction) {
+					successText += `\n💰 <b>Amount Spent:</b> ${transaction.amountBnb.toFixed(4)} BNB\n`;
+					if (transaction.amountToken) {
+						successText += `🎯 <b>Tokens Received:</b> ${transaction.amountToken.toFixed(2)}\n`;
+					}
+					if (transaction.gasFee) {
+						successText += `⛽ <b>Gas Fee:</b> ${transaction.gasFee.toFixed(6)} BNB\n`;
+					}
+				}
+
+				successText += `\n💳 <b>Transaction Hash:</b>\n<code>${result.txHash}</code>\n\n`;
+				successText += `🔗 <a href="https://bscscan.com/tx/${result.txHash}">View on BSCScan</a>`;
+
+				await getBot().sendMessage(chatId, successText, { parse_mode: 'HTML', disable_web_page_preview: true });
 			}
 
 			// Clear state
