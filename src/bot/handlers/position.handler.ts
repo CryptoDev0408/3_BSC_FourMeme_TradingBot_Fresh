@@ -358,20 +358,15 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		// Calculate final PNL
 		const finalPnlBnb = bnbReceived - position.buyAmount;
 		const finalPnlPercent = (finalPnlBnb / position.buyAmount) * 100;
+		const sellPrice = bnbReceived / position.tokenAmount; // BNB per token
 
-		// Update position as closed
-		position.status = PositionStatus.CLOSED;
-		position.sellTxHash = sellResult.txHash;
-		position.sellAmount = bnbReceived;
-		position.sellPrice = bnbReceived / position.tokenAmount; // BNB per token
-		position.sellTimestamp = new Date();
-		position.pnlBnb = finalPnlBnb;
-		position.pnlPercent = finalPnlPercent;
-		await position.save();
-
-		// Remove position from PositionManager (in-memory tracking)
-		positionManager.removePosition(position._id.toString());
-		logger.info(`Position removed from PositionManager: ${position._id}`);
+		// Close position - this will delete from DB and remove from memory
+		await positionManager.closePosition(
+			position._id.toString(),
+			sellPrice,
+			sellResult.txHash
+		);
+		logger.info(`Position closed and deleted: ${position._id}`);
 
 		// Log successful transaction
 		await Transaction.create({
