@@ -67,11 +67,16 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 					const typeEmoji = tx.type === TransactionType.BUY ? '🟢' : '🔴';
 					const statusEmoji = tx.status === TransactionStatus.SUCCESS ? '✅' : '❌';
 					const walletName = (tx.walletId as any)?.name || 'Unknown';
+					const walletAddress = (tx.walletId as any)?.address || 'Unknown';
 
 					text += `${typeEmoji} ${statusEmoji} <b>${tx.type}</b>\n`;
 
 					if (tx.tokenSymbol) {
 						text += `🪙 Token: ${tx.tokenSymbol}\n`;
+					}
+
+					if (tx.tokenAddress) {
+						text += `📍 Token CA: <code>${tx.tokenAddress}</code>\n`;
 					}
 
 					text += `💵 Amount: ${formatBnb(tx.amountBnb)} BNB\n`;
@@ -85,13 +90,11 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 					}
 
 					text += `💼 Wallet: ${walletName}\n`;
+					text += `👛 Address: <code>${walletAddress}</code>\n`;
 					text += `📅 ${tx.timestamp.toLocaleDateString()} ${tx.timestamp.toLocaleTimeString()}\n`;
 
 					if (tx.status === TransactionStatus.SUCCESS && tx.txHash && !tx.txHash.startsWith('FAILED')) {
-						text += `🔗 <code>${tx.txHash.substring(0, 16)}...</code>\n`;
-					}
-
-					if (tx.status === TransactionStatus.FAILED && tx.errorMessage) {
+						text += `🔗 TxHash: <code>${tx.txHash}</code>\n`;
 						text += `⚠️ ${tx.errorMessage.substring(0, 50)}...\n`;
 					}
 
@@ -222,6 +225,10 @@ export async function showFilteredTransactions(
 					text += `🪙 ${tx.tokenSymbol}\n`;
 				}
 
+				if (tx.tokenAddress) {
+					text += `📍 Token CA: <code>${tx.tokenAddress}</code>\n`;
+				}
+
 				text += `💵 ${formatBnb(tx.amountBnb)} BNB`;
 
 				if (tx.amountToken) {
@@ -231,7 +238,7 @@ export async function showFilteredTransactions(
 				text += `\n📅 ${tx.timestamp.toLocaleDateString()}\n`;
 
 				if (tx.status === TransactionStatus.SUCCESS && tx.txHash && !tx.txHash.startsWith('FAILED')) {
-					text += `🔗 <code>${tx.txHash.substring(0, 20)}...</code>\n`;
+					text += `🔗 TxHash: <code>${tx.txHash}</code>\n`;
 				}
 
 				if (tx.status === TransactionStatus.FAILED && tx.errorMessage) {
