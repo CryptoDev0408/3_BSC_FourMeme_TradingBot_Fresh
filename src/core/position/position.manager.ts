@@ -23,14 +23,16 @@ export class PositionManager {
 
 			logger.info('Initializing Position Manager...');
 
-			// Load all open positions from database
-			const openPositions = await Position.find({ status: 'OPEN' })
-				.populate('orderId')
-				.populate('userId')
+			// Load all open/active positions from database
+			const openPositions = await Position.find({ status: { $in: ['OPEN', 'ACTIVE'] } })
 				.populate('walletId');
 
 			for (const pos of openPositions) {
 				try {
+					// Normalize token amount by dividing by 10^decimals
+					// Database stores raw amount, but we need actual token count for PNL calculation
+					const actualTokenAmount = pos.tokenAmount / Math.pow(10, pos.tokenDecimals);
+
 					const bPosition = new B_Position({
 						id: pos._id.toString(),
 						orderId: pos.orderId.toString(),
@@ -40,11 +42,11 @@ export class PositionManager {
 							symbol: pos.tokenSymbol,
 							decimals: pos.tokenDecimals,
 						}),
-						tokenAmount: pos.tokenAmount,
+						tokenAmount: actualTokenAmount,
 						bnbSpent: pos.buyAmount,
 						buyPrice: pos.buyPrice,
 						currentPrice: pos.currentPrice || pos.buyPrice,
-						status: PositionStatus.OPEN,
+						status: PositionStatus.ACTIVE,
 						buyTxHash: pos.buyTxHash,
 						buyTimestamp: pos.buyTimestamp,
 						takeProfitPercent: pos.takeProfitTarget,

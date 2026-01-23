@@ -98,7 +98,8 @@ export class B_Wallet {
 	 */
 	static async getById(walletId: string): Promise<B_Wallet | null> {
 		try {
-			const wallet = await Wallet.findById(walletId);
+			// Must explicitly select encryptedPrivateKey since it has select: false in schema
+			const wallet = await Wallet.findById(walletId).select('+encryptedPrivateKey');
 			if (!wallet) return null;
 			return new B_Wallet(wallet);
 		} catch (error: any) {
@@ -112,7 +113,8 @@ export class B_Wallet {
 	 */
 	static async getByUserId(userId: string): Promise<B_Wallet[]> {
 		try {
-			const wallets = await Wallet.find({ userId }).sort({ createdAt: 1 });
+			// Must explicitly select encryptedPrivateKey since it has select: false in schema
+			const wallets = await Wallet.find({ userId }).select('+encryptedPrivateKey').sort({ createdAt: 1 });
 			return wallets.map(w => new B_Wallet(w));
 		} catch (error: any) {
 			logger.error('Failed to get user wallets:', error.message);
@@ -125,7 +127,8 @@ export class B_Wallet {
 	 */
 	static async getActiveWallet(userId: string): Promise<B_Wallet | null> {
 		try {
-			const wallet = await Wallet.findOne({ userId, isActive: true });
+			// Must explicitly select encryptedPrivateKey since it has select: false in schema
+			const wallet = await Wallet.findOne({ userId, isActive: true }).select('+encryptedPrivateKey');
 			if (!wallet) return null;
 			return new B_Wallet(wallet);
 		} catch (error: any) {
@@ -161,15 +164,32 @@ export class B_Wallet {
 	 * Get decrypted private key
 	 */
 	getPrivateKey(): string {
-		return decryptPrivateKey(this.encryptedPrivateKey);
+		try {
+			if (!this.encryptedPrivateKey) {
+				logger.error(`No encrypted private key for wallet ${this.id}`);
+				throw new Error('No encrypted private key found');
+			}
+			return decryptPrivateKey(this.encryptedPrivateKey);
+		} catch (error: any) {
+			logger.error(`Failed to decrypt private key for wallet ${this.id}: ${error.message}`);
+			throw error;
+		}
 	}
 
 	/**
 	 * Get ethers Wallet instance
 	 */
 	getEthersWallet(): ethers.Wallet {
-		const privateKey = this.getPrivateKey();
-		return new ethers.Wallet(privateKey, getProvider());
+		try {
+			const privateKey = this.getPrivateKey();
+			if (!privateKey) {
+				throw new Error('Private key is empty after decryption');
+			}
+			return new ethers.Wallet(privateKey, getProvider());
+		} catch (error: any) {
+			logger.error(`Failed to create ethers wallet for ${this.address}: ${error.message}`);
+			throw error;
+		}
 	}
 
 	/**

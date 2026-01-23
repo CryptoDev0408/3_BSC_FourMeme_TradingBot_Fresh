@@ -5,6 +5,7 @@ import { initializeBot, stopBot } from './bot';
 import { initializeProvider } from './core/wallet';
 import { positionManager } from './core/position/position.manager';
 import { tpslMonitor } from './services/tpsl.monitor';
+import { pnlMonitorEngine } from './services/pnl.monitor';
 
 /**
  * Main application entry point
@@ -52,10 +53,16 @@ async function main() {
 		await positionManager.initialize();
 		logger.success(`✅ Position Manager initialized (${positionManager.getOpenPositionCount()} open positions)`);
 
-		// Start TP/SL Monitor
-		logger.info('🎯 Starting TP/SL Monitor...');
+		// Start PNL Monitor Engine (High-Performance)
+		logger.info('⚡ Starting PNL Monitor Engine...');
+		pnlMonitorEngine.start();
+		logger.success('✅ PNL Monitor Engine started');
+
+		// Start TP/SL Monitor (Legacy, can be disabled if using PNL engine)
+		// Keeping it for backward compatibility
+		logger.info('🎯 Starting Legacy TP/SL Monitor...');
 		tpslMonitor.start();
-		logger.success('✅ TP/SL Monitor started');
+		logger.success('✅ Legacy TP/SL Monitor started');
 
 		// Initialize Telegram Bot
 		await initializeBot();
@@ -63,7 +70,8 @@ async function main() {
 		logger.success('🎉 Bot started successfully!');
 		logger.info('📱 Bot ready to receive commands');
 		logger.info('🔗 BSC RPC: ' + config.bsc.rpcHttpUrl);
-		logger.info('📊 Position Monitor: ' + (config.monitoring.positionMonitorInterval / 1000) + 's interval');
+		logger.info('⚡ PNL Monitor: ' + (config.monitoring.pnlMonitorInterval / 1000) + 's interval (High-Performance)');
+		logger.info('📊 Position Monitor: ' + (config.monitoring.positionMonitorInterval / 1000) + 's interval (Legacy)');
 		logger.info('🔍 Scanner Status: ' + (config.monitoring.scannerEnabled ? 'Enabled' : 'Disabled'));
 		logger.info('');
 		logger.info('✨ Try /start in Telegram to begin!');
@@ -71,6 +79,7 @@ async function main() {
 		// Graceful shutdown
 		process.on('SIGINT', async () => {
 			logger.info('📦 Shutting down gracefully...');
+			pnlMonitorEngine.stop();
 			tpslMonitor.stop();
 			await stopBot();
 			await database.disconnect();

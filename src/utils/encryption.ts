@@ -45,21 +45,25 @@ export function decryptPrivateKey(encryptedKey: string): string {
       throw new Error('Encryption key not configured');
     }
 
+    if (!encryptedKey) {
+      throw new Error('Encrypted key is empty or undefined');
+    }
+
     // Decrypt using AES
     const decrypted = CryptoJS.AES.decrypt(
       encryptedKey,
       config.security.encryptionKey
     ).toString(CryptoJS.enc.Utf8);
 
-    if (!decrypted) {
-      throw new Error('Decryption failed - invalid encrypted data');
+    if (!decrypted || decrypted.length === 0) {
+      throw new Error('Decryption failed - invalid encrypted data or wrong encryption key');
     }
 
     // Add 0x prefix
     return decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`;
   } catch (error: any) {
-    logger.error('Failed to decrypt private key:', error.message);
-    throw new Error('Decryption failed');
+    logger.error(`❌ Failed to decrypt private key: ${error.message}`);
+    throw new Error(`Decryption failed: ${error.message}`);
   }
 }
 

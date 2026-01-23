@@ -39,7 +39,8 @@ export const config = {
 
 	// Monitoring
 	monitoring: {
-		positionMonitorInterval: parseInt(process.env.POSITION_MONITOR_INTERVAL || '10000', 10),
+		positionMonitorInterval: parseInt(process.env.POSITION_MONITOR_INTERVAL || '10000', 10), // Legacy TP/SL monitor
+		pnlMonitorInterval: parseInt(process.env.PNL_MONITOR_INTERVAL || '2000', 10), // New PNL engine (default 2 seconds)
 		scannerEnabled: process.env.SCANNER_ENABLED === 'true',
 	},
 

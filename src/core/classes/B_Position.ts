@@ -1,15 +1,10 @@
 import { B_Token } from './B_Token';
 import { B_Order } from './B_Order';
 import { logger } from '../../utils/logger';
+import { PositionStatus } from '../../config/constants';
 
-/**
- * Position Status
- */
-export enum PositionStatus {
-	OPEN = 'OPEN',
-	CLOSED = 'CLOSED',
-	PARTIAL = 'PARTIAL',
-}
+// Export for backward compatibility
+export { PositionStatus };
 
 /**
  * B_Position - Position Tracking Class
@@ -61,7 +56,7 @@ export class B_Position {
 		this.bnbSpent = data.bnbSpent;
 		this.buyPrice = data.buyPrice;
 		this.currentPrice = data.currentPrice || data.buyPrice;
-		this.status = data.status || PositionStatus.OPEN;
+		this.status = data.status || PositionStatus.ACTIVE;
 		this.buyTxHash = data.buyTxHash;
 		this.sellTxHash = data.sellTxHash;
 		this.buyTimestamp = data.buyTimestamp || new Date();
@@ -198,10 +193,10 @@ export class B_Position {
 	}
 
 	/**
-	 * Check if position is open
+	 * Check if position is open/active
 	 */
 	isOpen(): boolean {
-		return this.status === PositionStatus.OPEN;
+		return this.status === PositionStatus.ACTIVE || this.status === 'OPEN' as any;
 	}
 
 	/**
