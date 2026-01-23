@@ -12,6 +12,8 @@ import { tokenValidator } from '../token/token.validator';
 import { positionManager } from '../position/position.manager';
 import { B_Position } from '../classes/B_Position';
 import { B_Token } from '../classes/B_Token';
+import { B_Wallet } from '../classes/B_Wallet';
+import { B_Transaction, TransactionType as TxType, transactionQueue } from '../classes';
 
 /**
  * Order Executor
@@ -96,22 +98,45 @@ export async function executeBuyOrder(
 			logger.warning('Failed to fetch price, will continue without it:', error.message);
 		}
 
-		// Execute the swap
+		// Execute the swap via transaction queue
 		logger.info(
 			`Buying ${order.tradingAmount} BNB worth of ${tokenMetadata.symbol} with ${order.slippage}% slippage...`
 		);
 
-		// Convert BNB amount to Wei
-		const bnbAmountWei = ethers.utils.parseEther(order.tradingAmount.toString());
+		// Create B_Wallet instance
+		const bWallet = await B_Wallet.getById(wallet._id.toString());
+		if (!bWallet) {
+			return { success: false, error: 'Failed to load wallet' };
+		}
 
-		const swapResult = await buyToken(
-			wallet._id.toString(),
-			order.userId.toString(),
-			tokenAddress,
-			bnbAmountWei.toString(),
-			order.slippage,
-			ethers.utils.parseUnits(order.gasFee.gasPrice, 'gwei').toString()
-		);
+		// Create B_Token instance
+		const bToken = new B_Token({
+			address: tokenAddress,
+			symbol: tokenMetadata.symbol || 'UNKNOWN',
+			name: tokenMetadata.name || 'Unknown Token',
+			decimals: tokenMetadata.decimals || 18,
+		});
+
+		// Create transaction for queue
+		const transaction = new B_Transaction({
+			type: TxType.BUY,
+			wallet: bWallet,
+			token: bToken,
+			bnbAmount: order.tradingAmount,
+			slippage: order.slippage,
+			gasPrice: order.gasFee.gasPrice,
+			gasLimit: order.gasFee.gasLimit,
+			orderId: order._id.toString(),
+			userId: order.userId.toString(),
+			priority: 10, // Normal priority for buys
+		});
+
+		// Queue the transaction
+		const txId = transactionQueue.push(transaction);
+		logger.info(`🎯 Buy transaction queued: ${txId}`);
+
+		// Wait for transaction to complete (with timeout)
+		const swapResult = await waitForTransactionComplete(transaction, 120000); // 120 second timeout
 
 		if (!swapResult.success || !swapResult.txHash) {
 			// Log failed transaction
@@ -166,14 +191,6 @@ export async function executeBuyOrder(
 		});
 
 		logger.success(`Position created in DB: ${positionDoc._id}`);
-
-		// Create B_Token instance
-		const bToken = new B_Token({
-			address: tokenAddress,
-			symbol: tokenMetadata.symbol || 'UNKNOWN',
-			name: tokenMetadata.name || 'Unknown Token',
-			decimals: tokenMetadata.decimals || 18,
-		});
 
 		// Normalize token amount (database stores raw, but B_Position needs actual count)
 		const actualTokenAmount = tokenAmountReceived / Math.pow(10, tokenMetadata.decimals || 18);
@@ -283,6 +300,43 @@ export async function executeManualBuy(
 		logger.error('Failed to execute manual buy:', error.message);
 		return { success: false, error: error.message };
 	}
+}
+
+/**
+ * Wait for a transaction to complete
+ */
+async function waitForTransactionComplete(transaction: B_Transaction, timeoutMs: number): Promise<any> {
+	const startTime = Date.now();
+
+	return new Promise((resolve) => {
+		const checkInterval = setInterval(() => {
+			// Check if completed
+			if (transaction.status === 'COMPLETED') {
+				clearInterval(checkInterval);
+				resolve(transaction.result);
+				return;
+			}
+
+			// Check if failed
+			if (transaction.status === 'FAILED' || transaction.status === 'CANCELLED') {
+				clearInterval(checkInterval);
+				resolve({
+					success: false,
+					error: transaction.error || 'Transaction failed or cancelled',
+				});
+				return;
+			}
+
+			// Check timeout
+			if (Date.now() - startTime > timeoutMs) {
+				clearInterval(checkInterval);
+				resolve({
+					success: false,
+					error: 'Transaction timeout',
+				});
+			}
+		}, 100); // Check every 100ms
+	});
 }
 
 /**

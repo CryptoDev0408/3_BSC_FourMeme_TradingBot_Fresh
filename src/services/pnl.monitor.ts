@@ -102,10 +102,26 @@ export class PNLMonitorEngine {
 
 		try {
 			// Get all open positions from memory (fast)
-			const positions = positionManager.getAllOpenPositions();
+			const allPositions = positionManager.getAllOpenPositions();
+
+			if (allPositions.length === 0) {
+				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No open positions to monitor`);
+				return;
+			}
+
+			// Filter positions to only those with ACTIVE orders
+			const positionOrderIds = new Set(allPositions.map(p => p.orderId));
+			const activeOrders = await Order.find({
+				_id: { $in: Array.from(positionOrderIds) },
+				isActive: true
+			}).select('_id');
+
+			const activeOrderIds = new Set(activeOrders.map(o => o._id.toString()));
+			const positions = allPositions.filter(p => activeOrderIds.has(p.orderId));
 
 			if (positions.length === 0) {
-				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No open positions to monitor`); return;
+				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No positions with active orders`);
+				return;
 			}
 
 			// Step 1: Extract unique token addresses
@@ -140,9 +156,8 @@ export class PNLMonitorEngine {
 			// Step 4: Log PNL summary
 			this.logPNLSummary(allPnlData);
 
-			// Step 5: Execute TP/SL for triggered positions
-			// DISABLED: Sell execution commented out for now
-			// await this.executeTriggeredPositions(allPnlData);
+			// Step 5: Execute TP/SL for triggered positions (AUTO-SELL)
+			await this.executeTriggeredPositions(allPnlData);
 
 			// Stats
 			const elapsed = Date.now() - startTime;
@@ -442,12 +457,21 @@ export class PNLMonitorEngine {
 				// Continue anyway since transaction queue reported success
 			}
 
-			// Close position
+			// Close position and remove from memory
+			logger.info(`Closing position ${positionId}...`);
 			await positionManager.closePosition(
 				positionId,
 				position.currentPrice,
 				sellResult.txHash!
 			);
+
+			// Verify position was removed from memory
+			const stillExists = positionManager.getPosition(positionId);
+			if (stillExists) {
+				logger.error(`⚠️ Position ${positionId} still exists in memory after close!`);
+			} else {
+				logger.success(`✅ Position ${positionId} removed from memory`);
+			}
 
 			// Send notification
 			await this.notifySell(order, position, reason, sellResult.txHash!);

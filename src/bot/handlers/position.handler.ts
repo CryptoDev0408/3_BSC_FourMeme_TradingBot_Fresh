@@ -4,6 +4,7 @@ import { User, Position } from '../../database/models';
 import { PositionStatus } from '../../config/constants';
 import { formatBnb, formatAddress, formatPercent } from '../../utils/formatter';
 import { getPositionsListKeyboard, getPositionDetailKeyboard } from '../keyboards/position.keyboard';
+import { B_Transaction, TransactionType, transactionQueue, B_Wallet, B_Token } from '../../core/classes';
 
 /**
  * Bot instance getter - resolves circular dependency
@@ -249,6 +250,7 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		const { ethers } = await import('ethers');
 		const { Transaction } = await import('../../database/models');
 		const { TransactionType, TransactionStatus } = await import('../../config/constants');
+		const { positionManager } = await import('../../core/position/position.manager');
 
 		// Get actual token balance from blockchain (to avoid precision issues)
 		let tokenAmountWei: string;
@@ -275,15 +277,49 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 			tokenAmountWei = ethers.utils.parseUnits(tokenAmountFixed, position.tokenDecimals).toString();
 		}
 
-		// Execute sell
-		const sellResult = await sellToken(
-			wallet._id.toString(),
-			user._id.toString(),
-			position.tokenAddress,
-			tokenAmountWei,
-			order.slippage,
-			ethers.utils.parseUnits(order.gasFee.gasPrice, 'gwei').toString()
-		);
+		// Load wallet and token for queue
+		const bWallet = await B_Wallet.getById(wallet._id.toString());
+		if (!bWallet) {
+			await getBot().editMessageText(
+				`❌ <b>Sell Failed</b>\n\nFailed to load wallet`,
+				{
+					chat_id: chatId,
+					message_id: processingMsg.message_id,
+					parse_mode: 'HTML',
+				}
+			);
+			return;
+		}
+
+		const bToken = new B_Token({
+			address: position.tokenAddress,
+			symbol: position.tokenSymbol,
+			decimals: position.tokenDecimals,
+		});
+
+		const tokenAmountStr = ethers.utils.formatUnits(tokenAmountWei, position.tokenDecimals);
+
+		// Create transaction for queue
+		const transaction = new B_Transaction({
+			type: TransactionType.SELL,
+			wallet: bWallet,
+			token: bToken,
+			tokenAmount: tokenAmountStr,
+			slippage: order.slippage,
+			gasPrice: order.gasFee.gasPrice,
+			gasLimit: order.gasFee.gasLimit,
+			orderId: order._id.toString(),
+			positionId: position._id.toString(),
+			userId: user._id.toString(),
+			priority: 50, // Normal priority for manual sells
+		});
+
+		// Queue the transaction
+		const txId = transactionQueue.push(transaction);
+		logger.info(`🎯 Manual sell transaction queued: ${txId}`);
+
+		// Wait for completion
+		const sellResult = await waitForTxComplete(transaction, 120000);
 
 		if (!sellResult.success || !sellResult.txHash) {
 			await getBot().editMessageText(
@@ -334,7 +370,6 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		await position.save();
 
 		// Remove position from PositionManager (in-memory tracking)
-		const { positionManager } = await import('../../core/position/position.manager');
 		positionManager.removePosition(position._id.toString());
 		logger.info(`Position removed from PositionManager: ${position._id}`);
 
@@ -384,4 +419,38 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		logger.error('Failed to sell position:', error.message);
 		await getBot().sendMessage(chatId, `❌ Failed to sell position: ${error.message}`);
 	}
+}
+
+/**
+ * Wait for transaction to complete
+ */
+async function waitForTxComplete(transaction: any, timeoutMs: number): Promise<any> {
+	const startTime = Date.now();
+
+	return new Promise((resolve) => {
+		const checkInterval = setInterval(() => {
+			if (transaction.status === 'COMPLETED') {
+				clearInterval(checkInterval);
+				resolve(transaction.result);
+				return;
+			}
+
+			if (transaction.status === 'FAILED' || transaction.status === 'CANCELLED') {
+				clearInterval(checkInterval);
+				resolve({
+					success: false,
+					error: transaction.error || 'Transaction failed or cancelled',
+				});
+				return;
+			}
+
+			if (Date.now() - startTime > timeoutMs) {
+				clearInterval(checkInterval);
+				resolve({
+					success: false,
+					error: 'Transaction timeout',
+				});
+			}
+		}, 100);
+	});
 }

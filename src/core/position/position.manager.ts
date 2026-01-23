@@ -161,9 +161,9 @@ export class PositionManager {
 
 		position.close(sellTxHash, sellPrice);
 
-		// Update in database
+		// Update in database with proper status
 		await Position.findByIdAndUpdate(positionId, {
-			status: 'CLOSED',
+			status: 'SOLD',
 			sellPrice,
 			sellTxHash,
 			currentPrice: sellPrice,
@@ -172,9 +172,9 @@ export class PositionManager {
 			sellTimestamp: new Date(),
 		});
 
-		// Remove from memory
+		// Remove from memory immediately
 		this.positions.delete(positionId);
-		logger.info(`Position closed: ${positionId}`);
+		logger.success(`Position closed and removed: ${positionId}`);
 	}
 
 	/**
