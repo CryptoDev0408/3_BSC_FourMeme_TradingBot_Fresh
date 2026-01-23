@@ -252,6 +252,40 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		const { TransactionType, TransactionStatus } = await import('../../config/constants');
 		const { positionManager } = await import('../../core/position/position.manager');
 
+		// Get position from memory
+		const bPosition = positionManager.getPosition(position._id.toString());
+		if (!bPosition) {
+			await getBot().editMessageText(
+				`❌ <b>Sell Failed</b>\n\n` +
+				`Token: ${position.tokenSymbol}\n` +
+				`Error: Position not found in memory`,
+				{
+					chat_id: chatId,
+					message_id: processingMsg.message_id,
+					parse_mode: 'HTML',
+				}
+			);
+			return;
+		}
+
+		// Check if sell already in progress
+		if (bPosition.hasPendingSell) {
+			await getBot().editMessageText(
+				`⏳ <b>Sell Already in Progress</b>\n\n` +
+				`Token: ${position.tokenSymbol}\n` +
+				`Please wait for the current sell transaction to complete.`,
+				{
+					chat_id: chatId,
+					message_id: processingMsg.message_id,
+					parse_mode: 'HTML',
+				}
+			);
+			return;
+		}
+
+		// Set pending sell flag to prevent duplicate sells
+		bPosition.hasPendingSell = true;
+
 		// Get actual token balance from blockchain (to avoid precision issues)
 		let tokenAmountWei: string;
 		try {
@@ -259,6 +293,7 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 
 			// Verify we have tokens to sell
 			if (tokenAmountWei === '0' || ethers.BigNumber.from(tokenAmountWei).isZero()) {
+				bPosition.hasPendingSell = false; // Clear flag on error
 				await getBot().editMessageText(
 					`❌ <b>Sell Failed</b>\n\n` +
 					`Token: ${position.tokenSymbol}\n` +
@@ -280,6 +315,7 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		// Load wallet and token for queue
 		const bWallet = await B_Wallet.getById(wallet._id.toString());
 		if (!bWallet) {
+			bPosition.hasPendingSell = false; // Clear flag on error
 			await getBot().editMessageText(
 				`❌ <b>Sell Failed</b>\n\nFailed to load wallet`,
 				{
@@ -322,6 +358,7 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		const sellResult = await waitForTxComplete(transaction, 120000);
 
 		if (!sellResult.success || !sellResult.txHash) {
+			bPosition.hasPendingSell = false; // Clear flag on failure
 			await getBot().editMessageText(
 				`❌ <b>Sell Failed</b>\n\n` +
 				`Token: ${position.tokenSymbol}\n` +
