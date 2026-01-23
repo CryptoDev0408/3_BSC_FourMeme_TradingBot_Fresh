@@ -176,20 +176,12 @@ export class PositionManager {
 
 		position.close(sellTxHash, sellPrice);
 
-		// Update in database with proper status
-		await Position.findByIdAndUpdate(positionId, {
-			status: 'SOLD',
-			sellPrice,
-			sellTxHash,
-			currentPrice: sellPrice,
-			pnlPercent: position.getPnLPercent(),
-			pnlBnb: position.getPnL(),
-			sellTimestamp: new Date(),
-		});
+		// Delete position from database completely
+		await Position.findByIdAndDelete(positionId);
 
 		// Remove from memory immediately
 		this.positions.delete(positionId);
-		logger.success(`Position closed and removed: ${positionId}`);
+		logger.success(`Position closed and deleted: ${positionId}`);
 	}
 
 	/**
