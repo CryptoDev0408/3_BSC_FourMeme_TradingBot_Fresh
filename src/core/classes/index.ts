@@ -10,3 +10,5 @@ export { B_Order } from './B_Order';
 export { B_Token } from './B_Token';
 export { B_Position } from './B_Position';
 export { B_Trading } from './B_Trading';
+export { B_Transaction, TransactionType, TransactionStatus } from './B_Transaction';
+export { B_Queue, transactionQueue } from './B_Queue';

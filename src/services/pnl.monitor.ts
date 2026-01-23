@@ -6,7 +6,7 @@ import { config } from '../config/config';
 import { bot } from '../bot';
 import { getPriceService } from './price.service';
 import { getProvider } from '../core/wallet/wallet.service';
-import { B_Trading } from '../core/classes/B_Trading';
+import { B_Transaction, TransactionType, transactionQueue } from '../core/classes';
 
 interface PositionPNL {
 	positionId: string;
@@ -251,6 +251,43 @@ export class PNLMonitorEngine {
 	}
 
 	/**
+	 * Wait for a transaction to complete
+	 */
+	private async waitForTransaction(transaction: B_Transaction, timeoutMs: number): Promise<any> {
+		const startTime = Date.now();
+
+		return new Promise((resolve) => {
+			const checkInterval = setInterval(() => {
+				// Check if completed
+				if (transaction.status === 'COMPLETED') {
+					clearInterval(checkInterval);
+					resolve(transaction.result);
+					return;
+				}
+
+				// Check if failed
+				if (transaction.status === 'FAILED' || transaction.status === 'CANCELLED') {
+					clearInterval(checkInterval);
+					resolve({
+						success: false,
+						error: transaction.error || 'Transaction failed or cancelled',
+					});
+					return;
+				}
+
+				// Check timeout
+				if (Date.now() - startTime > timeoutMs) {
+					clearInterval(checkInterval);
+					resolve({
+						success: false,
+						error: 'Transaction timeout',
+					});
+				}
+			}, 100); // Check every 100ms
+		});
+	}
+
+	/**
 	 * Execute TP/SL for triggered positions
 	 */
 	private async executeTriggeredPositions(pnlData: PositionPNL[]): Promise<void> {
@@ -309,8 +346,9 @@ export class PNLMonitorEngine {
 			logger.debug(`Wallet address: ${wallet.address}, Order: ${order._id}`);
 
 			// Test wallet access before selling
+			let ethersWallet;
 			try {
-				const ethersWallet = wallet.getEthersWallet();
+				ethersWallet = wallet.getEthersWallet();
 				logger.debug(`Wallet ethers instance created successfully for ${ethersWallet.address}`);
 			} catch (walletError: any) {
 				logger.error(`Failed to access wallet: ${walletError.message}`);
@@ -318,26 +356,90 @@ export class PNLMonitorEngine {
 				return false;
 			}
 
-			// Execute sell on PancakeSwap
-			// Use toFixed(0) to avoid scientific notation for large numbers
-			const tokenAmountStr = typeof position.tokenAmount === 'number'
-				? position.tokenAmount.toFixed(0)
-				: position.tokenAmount.toString();
+			// Get actual token balance from wallet (sell 100%)
+			const ethers = require('ethers');
+			const tokenContract = new ethers.Contract(
+				position.token.address,
+				['function balanceOf(address) view returns (uint256)'],
+				ethersWallet
+			);
 
-			const sellResult = await B_Trading.sell({
+			let actualBalance;
+			try {
+				actualBalance = await tokenContract.balanceOf(wallet.address);
+				logger.info(`Actual token balance: ${ethers.utils.formatUnits(actualBalance, position.token.decimals)} ${position.token.symbol}`);
+
+				if (actualBalance.isZero()) {
+					logger.error('Token balance is zero, cannot sell');
+					await this.notifyError(order, position, 'Token balance is zero');
+					return false;
+				}
+			} catch (balanceError: any) {
+				logger.error(`Failed to get token balance: ${balanceError.message}`);
+				await this.notifyError(order, position, `Failed to get token balance: ${balanceError.message}`);
+				return false;
+			}
+
+			// Sell 100% of actual balance
+			const tokenAmountStr = ethers.utils.formatUnits(actualBalance, position.token.decimals);
+
+			// Create transaction for queue
+			const transaction = new B_Transaction({
+				type: TransactionType.SELL,
 				wallet,
 				token: position.token,
 				tokenAmount: tokenAmountStr,
 				slippage: order.slippage,
 				gasPrice: order.gasFee.gasPrice,
 				gasLimit: order.gasFee.gasLimit,
+				orderId: order._id.toString(),
+				positionId: position.id,
+				userId: order.userId.toString(),
+				priority: reason === 'STOP_LOSS' ? 100 : 50, // Stop loss has higher priority
 			});
+
+			// Queue the transaction
+			const txId = transactionQueue.push(transaction);
+			logger.info(`🎯 Sell transaction queued: ${txId}`);
+
+			// Wait for transaction to complete (with timeout)
+			const sellResult = await this.waitForTransaction(transaction, 120000); // 120 second timeout
 
 			if (!sellResult.success) {
 				const errorMsg = sellResult.error || 'Unknown error';
 				logger.error(`❌ Sell failed: ${errorMsg}`);
 				await this.notifyError(order, position, `Sell failed: ${errorMsg}`);
 				return false;
+			}
+
+			// Verify transaction was actually executed
+			if (!sellResult.txHash) {
+				logger.error('❌ No transaction hash returned');
+				await this.notifyError(order, position, 'No transaction hash returned');
+				return false;
+			}
+
+			// Double-check transaction receipt
+			try {
+				const provider = getProvider();
+				const receipt = await provider.getTransactionReceipt(sellResult.txHash);
+
+				if (!receipt) {
+					logger.error('❌ Transaction receipt not found');
+					await this.notifyError(order, position, 'Transaction receipt not found');
+					return false;
+				}
+
+				if (receipt.status !== 1) {
+					logger.error('❌ Transaction reverted (status = 0)');
+					await this.notifyError(order, position, 'Transaction reverted');
+					return false;
+				}
+
+				logger.success(`✅ Transaction confirmed in block ${receipt.blockNumber}`);
+			} catch (receiptError: any) {
+				logger.error(`Failed to verify transaction receipt: ${receiptError.message}`);
+				// Continue anyway since transaction queue reported success
 			}
 
 			// Close position

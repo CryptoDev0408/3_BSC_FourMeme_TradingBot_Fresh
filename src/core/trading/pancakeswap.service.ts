@@ -58,7 +58,7 @@ function getTokenContract(tokenAddress: string, signer?: ethers.Signer): ethers.
 /**
  * Calculate minimum amount out with slippage
  * @param amountOut - Expected output amount
- * @param slippagePercent - Slippage tolerance percentage (0.1 - 50)
+ * @param slippagePercent - Slippage tolerance percentage (0.1 - 99)
  * @returns Minimum amount out after slippage
  */
 export function calculateMinAmountOut(amountOut: BigNumber, slippagePercent: number): BigNumber {
@@ -433,7 +433,7 @@ export async function estimateSell(
  * @param userId - User ID for verification
  * @param tokenAddress - Token to buy
  * @param bnbAmount - BNB amount in wei
- * @param slippagePercent - Slippage tolerance (0.1 - 50)
+ * @param slippagePercent - Slippage tolerance (0.1 - 99)
  * @param gasPrice - Custom gas price (optional, uses network price if not provided)
  * @returns Swap result with transaction hash
  */
@@ -556,7 +556,7 @@ export async function buyToken(
  * @param userId - User ID for verification
  * @param tokenAddress - Token to sell
  * @param tokenAmount - Token amount in wei
- * @param slippagePercent - Slippage tolerance (0.1 - 50)
+ * @param slippagePercent - Slippage tolerance (0.1 - 99)
  * @param gasPrice - Custom gas price (optional)
  * @returns Swap result with transaction hash
  */

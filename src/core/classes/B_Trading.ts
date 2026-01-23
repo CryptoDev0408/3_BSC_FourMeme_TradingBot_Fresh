@@ -193,22 +193,68 @@ export class B_Trading {
 
 			logger.info(`Transaction sent: ${tx.hash}`);
 
-			// Wait for confirmation
-			const receipt = await tx.wait();
+			// Wait for confirmation with retries
+			let receipt;
+			let confirmAttempts = 0;
+			const maxConfirmAttempts = 3;
+
+			while (confirmAttempts < maxConfirmAttempts) {
+				try {
+					receipt = await tx.wait(1); // Wait for 1 confirmation
+					break;
+				} catch (confirmError: any) {
+					confirmAttempts++;
+					logger.warning(`Confirmation attempt ${confirmAttempts}/${maxConfirmAttempts} failed: ${confirmError.message}`);
+
+					if (confirmAttempts < maxConfirmAttempts) {
+						// Wait 5 seconds before retry
+						await new Promise(resolve => setTimeout(resolve, 5000));
+
+						// Try to get receipt directly
+						try {
+							const provider = new ethers.providers.JsonRpcProvider(config.bsc.rpcHttpUrl);
+							receipt = await provider.getTransactionReceipt(tx.hash);
+							if (receipt) {
+								logger.info('Got receipt directly from provider');
+								break;
+							}
+						} catch (e) {
+							logger.debug('Direct receipt fetch failed');
+						}
+					} else {
+						logger.error('Failed to confirm transaction after multiple attempts');
+						return {
+							success: false,
+							error: `Transaction confirmation failed: ${confirmError.message}`,
+							txHash: tx.hash,
+						};
+					}
+				}
+			}
+
+			if (!receipt) {
+				logger.error('No receipt received');
+				return {
+					success: false,
+					error: 'No transaction receipt',
+					txHash: tx.hash,
+				};
+			}
 
 			if (receipt.status === 1) {
 				const bnbAmount = ethers.utils.formatEther(expectedOut);
-				logger.success(`Sell successful! Got ${bnbAmount} BNB`);
+				logger.success(`Sell successful! Got ${bnbAmount} BNB | Block: ${receipt.blockNumber}`);
 				return {
 					success: true,
 					txHash: tx.hash,
 					bnbAmount,
 				};
 			} else {
-				logger.error('Transaction failed');
+				logger.error('Transaction failed (status = 0)');
 				return {
 					success: false,
 					error: 'Transaction reverted',
+					txHash: tx.hash,
 				};
 			}
 		} catch (error: any) {

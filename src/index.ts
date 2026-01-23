@@ -6,6 +6,7 @@ import { initializeProvider } from './core/wallet';
 import { positionManager } from './core/position/position.manager';
 import { tpslMonitor } from './services/tpsl.monitor';
 import { pnlMonitorEngine } from './services/pnl.monitor';
+import { transactionQueue } from './core/classes';
 
 /**
  * Main application entry point
@@ -53,6 +54,11 @@ async function main() {
 		await positionManager.initialize();
 		logger.success(`✅ Position Manager initialized (${positionManager.getOpenPositionCount()} open positions)`);
 
+		// Start Transaction Queue
+		logger.info('🔄 Starting Transaction Queue...');
+		transactionQueue.start();
+		logger.success('✅ Transaction Queue started');
+
 		// Start PNL Monitor Engine (High-Performance)
 		logger.info('⚡ Starting PNL Monitor Engine...');
 		pnlMonitorEngine.start();
@@ -74,6 +80,7 @@ async function main() {
 		logger.info('📊 Position Monitor: ' + (config.monitoring.positionMonitorInterval / 1000) + 's interval (Legacy)');
 		logger.info('🔍 Scanner Status: ' + (config.monitoring.scannerEnabled ? 'Enabled' : 'Disabled'));
 		logger.info('');
+		await transactionQueue.stop();
 		logger.info('✨ Try /start in Telegram to begin!');
 
 		// Graceful shutdown

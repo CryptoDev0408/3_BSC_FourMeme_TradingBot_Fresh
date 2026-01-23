@@ -175,13 +175,16 @@ export async function executeBuyOrder(
 			decimals: tokenMetadata.decimals || 18,
 		});
 
+		// Normalize token amount (database stores raw, but B_Position needs actual count)
+		const actualTokenAmount = tokenAmountReceived / Math.pow(10, tokenMetadata.decimals || 18);
+
 		// Create B_Position instance and add to PositionManager
 		const bPosition = new B_Position({
 			id: positionDoc._id.toString(),
 			orderId: order._id.toString(),
 			userId: order.userId.toString(),
 			token: bToken,
-			tokenAmount: tokenAmountReceived,
+			tokenAmount: actualTokenAmount,  // Use normalized amount
 			bnbSpent: order.tradingAmount,
 			buyPrice: buyPriceInBnb,
 			currentPrice: buyPriceInBnb,
@@ -308,7 +311,7 @@ export function validateOrderExecution(order: IOrder, wallet: IWallet): { valid:
 	}
 
 	// Check slippage
-	if (order.slippage < 0.1 || order.slippage > 50) {
+	if (order.slippage < 0.1 || order.slippage > 99) {
 		return { valid: false, error: 'Invalid slippage percentage' };
 	}
 
