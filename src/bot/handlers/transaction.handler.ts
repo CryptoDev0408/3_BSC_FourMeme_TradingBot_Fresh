@@ -8,6 +8,7 @@ import { formatBnb } from '../../utils/formatter';
  * Bot instance getter - resolves circular dependency
  */
 let botInstance: TelegramBot;
+
 export function setBotInstance(bot: TelegramBot): void {
 	botInstance = bot;
 }
@@ -23,8 +24,12 @@ function getBot(): TelegramBot {
  */
 export async function showTransactionsList(chatId: string, messageId?: number): Promise<void> {
 	try {
+		logger.info(`[TRANSACTIONS] Showing transactions list for chatId: ${chatId}, messageId: ${messageId}`);
+
 		// Get user
 		const user = await User.findOne({ chatId });
+		logger.info(`[TRANSACTIONS] User found: ${user ? user._id : 'null'}`);
+
 		if (!user) {
 			await getBot().sendMessage(chatId, '❌ User not found. Please /start the bot first.');
 			return;
@@ -35,6 +40,8 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 			.sort({ timestamp: -1 })
 			.limit(50)
 			.populate('walletId');
+
+		logger.info(`[TRANSACTIONS] Found ${transactions.length} transactions`);
 
 		let text = '📜 <b>Transaction History</b>\n\n';
 
@@ -56,38 +63,43 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 
 			// Show last 20 transactions
 			for (const tx of transactions.slice(0, 20)) {
-				const typeEmoji = tx.type === TransactionType.BUY ? '🟢' : '🔴';
-				const statusEmoji = tx.status === TransactionStatus.SUCCESS ? '✅' : '❌';
-				const walletName = (tx.walletId as any)?.name || 'Unknown';
+				try {
+					const typeEmoji = tx.type === TransactionType.BUY ? '🟢' : '🔴';
+					const statusEmoji = tx.status === TransactionStatus.SUCCESS ? '✅' : '❌';
+					const walletName = (tx.walletId as any)?.name || 'Unknown';
 
-				text += `${typeEmoji} ${statusEmoji} <b>${tx.type}</b>\n`;
+					text += `${typeEmoji} ${statusEmoji} <b>${tx.type}</b>\n`;
 
-				if (tx.tokenSymbol) {
-					text += `🪙 Token: ${tx.tokenSymbol}\n`;
+					if (tx.tokenSymbol) {
+						text += `🪙 Token: ${tx.tokenSymbol}\n`;
+					}
+
+					text += `💵 Amount: ${formatBnb(tx.amountBnb)} BNB\n`;
+
+					if (tx.amountToken && typeof tx.amountToken === 'number') {
+						text += `🎯 Tokens: ${tx.amountToken.toFixed(2)}\n`;
+					}
+
+					if (tx.gasFee) {
+						text += `⛽ Gas: ${formatBnb(tx.gasFee)} BNB\n`;
+					}
+
+					text += `💼 Wallet: ${walletName}\n`;
+					text += `📅 ${tx.timestamp.toLocaleDateString()} ${tx.timestamp.toLocaleTimeString()}\n`;
+
+					if (tx.status === TransactionStatus.SUCCESS && tx.txHash && !tx.txHash.startsWith('FAILED')) {
+						text += `🔗 <code>${tx.txHash.substring(0, 16)}...</code>\n`;
+					}
+
+					if (tx.status === TransactionStatus.FAILED && tx.errorMessage) {
+						text += `⚠️ ${tx.errorMessage.substring(0, 50)}...\n`;
+					}
+
+					text += '\n';
+				} catch (txError: any) {
+					logger.error(`[TRANSACTIONS] Error formatting transaction ${tx._id}:`, txError.message);
+					// Continue with next transaction
 				}
-
-				text += `💵 Amount: ${formatBnb(tx.amountBnb)} BNB\n`;
-
-				if (tx.amountToken) {
-					text += `🎯 Tokens: ${tx.amountToken.toFixed(2)}\n`;
-				}
-
-				if (tx.gasFee) {
-					text += `⛽ Gas: ${formatBnb(tx.gasFee)} BNB\n`;
-				}
-
-				text += `💼 Wallet: ${walletName}\n`;
-				text += `📅 ${tx.timestamp.toLocaleDateString()} ${tx.timestamp.toLocaleTimeString()}\n`;
-
-				if (tx.status === TransactionStatus.SUCCESS && tx.txHash && !tx.txHash.startsWith('FAILED')) {
-					text += `🔗 <code>${tx.txHash.substring(0, 16)}...</code>\n`;
-				}
-
-				if (tx.status === TransactionStatus.FAILED && tx.errorMessage) {
-					text += `⚠️ ${tx.errorMessage.substring(0, 50)}...\n`;
-				}
-
-				text += '\n';
 			}
 
 			if (transactions.length > 20) {
@@ -110,12 +122,26 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 		};
 
 		if (messageId) {
-			await getBot().editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				// Try to edit the message
+				await getBot().editMessageText(text, {
+					chat_id: chatId,
+					message_id: messageId,
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+				});
+			} catch (editError: any) {
+				// If editing fails (e.g., message is a photo), delete and send new
+				if (editError.message?.includes('there is no text in the message to edit')) {
+					await getBot().deleteMessage(chatId, messageId);
+					await getBot().sendMessage(chatId, text, {
+						parse_mode: 'HTML',
+						reply_markup: keyboard,
+					});
+				} else {
+					throw editError;
+				}
+			}
 		} else {
 			await getBot().sendMessage(chatId, text, {
 				parse_mode: 'HTML',
@@ -124,7 +150,13 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 		}
 	} catch (error: any) {
 		logger.error('Failed to show transactions list:', error.message);
-		await getBot().sendMessage(chatId, '❌ Failed to load transactions. Please try again.');
+		logger.error('Error stack:', error.stack);
+		console.error('Transaction list error:', error);
+		try {
+			await getBot().sendMessage(chatId, `❌ Failed to load transactions.\n\nError: ${error.message}`);
+		} catch (sendError) {
+			logger.error('Failed to send error message:', sendError);
+		}
 	}
 }
 
@@ -222,12 +254,26 @@ export async function showFilteredTransactions(
 		};
 
 		if (messageId) {
-			await getBot().editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				// Try to edit the message
+				await getBot().editMessageText(text, {
+					chat_id: chatId,
+					message_id: messageId,
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+				});
+			} catch (editError: any) {
+				// If editing fails (e.g., message is a photo), delete and send new
+				if (editError.message?.includes('there is no text in the message to edit')) {
+					await getBot().deleteMessage(chatId, messageId);
+					await getBot().sendMessage(chatId, text, {
+						parse_mode: 'HTML',
+						reply_markup: keyboard,
+					});
+				} else {
+					throw editError;
+				}
+			}
 		} else {
 			await getBot().sendMessage(chatId, text, {
 				parse_mode: 'HTML',

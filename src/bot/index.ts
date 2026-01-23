@@ -543,6 +543,7 @@ function setupCallbackHandlers(): void {
 				const positionId = data.replace('position_sell_', '');
 				await handlePositionSell(chatId, positionId, query.message?.message_id);
 			} else if (data === 'transactions') {
+				console.log('[BOT] Routing to transactions handler');
 				await showTransactionsList(chatId, query.message?.message_id);
 			} else if (data.startsWith('txs_filter_')) {
 				const filter = data.replace('txs_filter_', '') as 'buy' | 'sell' | 'success' | 'failed';
