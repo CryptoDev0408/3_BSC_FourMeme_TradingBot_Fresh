@@ -103,7 +103,7 @@ export class PNLMonitorEngine {
 		try {
 			// Get all open positions from DATABASE (always fresh)
 			const dbPositions = await Position.find({
-				status: { $in: ['OPEN', 'ACTIVE'] }
+				status: { $in: ['PENDING', 'OPEN', 'ACTIVE'] }
 			}).populate('orderId');
 
 			if (dbPositions.length === 0) {
@@ -129,15 +129,24 @@ export class PNLMonitorEngine {
 				return;
 			}
 
-			// Filter positions to only those with ACTIVE orders
-			const positionOrderIds = new Set(allPositions.map(p => p.orderId));
+			// Separate PENDING and ACTIVE positions
+			const pendingPositions = allPositions.filter(p => p.status === 'PENDING');
+			const activePositions = allPositions.filter(p => p.status === 'ACTIVE' || p.status === 'OPEN');
+
+			// Step 1: Process PENDING positions - check token balance
+			if (pendingPositions.length > 0) {
+				await this.processPendingPositions(pendingPositions);
+			}
+
+			// Step 2: Filter active positions to only those with ACTIVE orders
+			const positionOrderIds = new Set(activePositions.map(p => p.orderId));
 			const activeOrders = await Order.find({
 				_id: { $in: Array.from(positionOrderIds) },
 				isActive: true
 			}).select('_id');
 
 			const activeOrderIds = new Set(activeOrders.map(o => o._id.toString()));
-			const positions = allPositions.filter(p => activeOrderIds.has(p.orderId));
+			const positions = activePositions.filter(p => activeOrderIds.has(p.orderId));
 
 			if (positions.length === 0) {
 				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No positions with active orders`);
@@ -187,6 +196,60 @@ export class PNLMonitorEngine {
 			// Completed silently
 		} catch (error: any) {
 			logger.error(`PNL Monitor error: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Process PENDING positions - check token balance and activate when balance confirmed
+	 */
+	private async processPendingPositions(pendingPositions: any[]): Promise<void> {
+		const provider = getProvider();
+
+		for (const position of pendingPositions) {
+			try {
+				const tokenContract = new (await import('ethers')).ethers.Contract(
+					position.token.address,
+					['function balanceOf(address) view returns (uint256)'],
+					provider
+				);
+
+				// Get wallet from database position (has walletId)
+				const dbPosition = await Position.findById(position.id).populate('walletId');
+				if (!dbPosition || !dbPosition.walletId) {
+					logger.warning(`Wallet not found for PENDING position ${position.id}`);
+					continue;
+				}
+
+				const walletDoc = dbPosition.walletId as any;
+				const walletAddress = walletDoc.address;
+
+				// Check token balance
+				const balance = await tokenContract.balanceOf(walletAddress);
+				const balanceFormatted = (await import('ethers')).ethers.utils.formatUnits(balance, position.token.decimals);
+				const balanceNumber = parseFloat(balanceFormatted);
+
+				if (balanceNumber > 0) {
+					logger.success(`✅ PENDING position ${position.id} confirmed! Balance: ${balanceFormatted} ${position.token.symbol}`);
+
+					// Update position in database
+					await Position.findByIdAndUpdate(position.id, {
+						tokenAmount: balanceNumber,
+						status: 'ACTIVE',
+						lastPriceUpdate: new Date(),
+					});
+
+					// Update in memory
+					position.tokenAmount = balanceNumber;
+					position.status = 'ACTIVE';
+
+					logger.info(`🎯 Position ${position.id} activated with ${balanceNumber} tokens`);
+				} else {
+					// Still waiting for balance
+					logger.debug(`⏳ PENDING position ${position.id} still waiting for balance...`);
+				}
+			} catch (error: any) {
+				logger.error(`Failed to check balance for PENDING position ${position.id}: ${error.message}`);
+			}
 		}
 	}
 

@@ -68,6 +68,7 @@ export const MAX_WALLET_NAME_LENGTH = 20;
 // POSITION STATUS
 // ==============================================
 export enum PositionStatus {
+	PENDING = 'PENDING',
 	ACTIVE = 'ACTIVE',
 	SOLD = 'SOLD',
 	FAILED = 'FAILED',

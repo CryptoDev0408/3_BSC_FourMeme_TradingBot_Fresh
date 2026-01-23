@@ -198,7 +198,9 @@ export class B_Position {
 	 * Check if position is open/active
 	 */
 	isOpen(): boolean {
-		return this.status === PositionStatus.ACTIVE || this.status === 'OPEN' as any;
+		return this.status === PositionStatus.PENDING ||
+			this.status === PositionStatus.ACTIVE ||
+			this.status === 'OPEN' as any;
 	}
 
 	/**

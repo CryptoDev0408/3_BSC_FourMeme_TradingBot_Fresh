@@ -192,7 +192,7 @@ export async function executeBuyOrder(
 			pnlPercent: 0,
 			pnlBnb: 0,
 			pnlUsd: 0,
-			status: PositionStatus.ACTIVE,
+			status: PositionStatus.PENDING,
 			takeProfitTarget: order.takeProfitPercent,
 			stopLossTarget: order.stopLossPercent,
 		});
@@ -212,7 +212,7 @@ export async function executeBuyOrder(
 			bnbSpent: order.tradingAmount,
 			buyPrice: buyPriceInBnb,
 			currentPrice: buyPriceInBnb,
-			status: PositionStatus.ACTIVE,
+			status: PositionStatus.PENDING,
 			buyTxHash: swapResult.txHash,
 			buyTimestamp: new Date(),
 			takeProfitPercent: order.takeProfitPercent,

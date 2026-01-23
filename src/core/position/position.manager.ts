@@ -24,7 +24,7 @@ export class PositionManager {
 			logger.info('Initializing Position Manager...');
 
 			// Load all open/active positions from database
-			const openPositions = await Position.find({ status: { $in: ['OPEN', 'ACTIVE'] } })
+			const openPositions = await Position.find({ status: { $in: ['PENDING', 'OPEN', 'ACTIVE'] } })
 				.populate('walletId')
 				.populate('orderId'); // Populate order to get TP/SL enabled flags
 
@@ -61,7 +61,7 @@ export class PositionManager {
 						bnbSpent: pos.buyAmount,
 						buyPrice: pos.buyPrice,
 						currentPrice: pos.currentPrice || pos.buyPrice,
-						status: PositionStatus.ACTIVE,
+						status: pos.status as PositionStatus,
 						buyTxHash: pos.buyTxHash,
 						buyTimestamp: pos.buyTimestamp,
 						takeProfitPercent: pos.takeProfitTarget,
