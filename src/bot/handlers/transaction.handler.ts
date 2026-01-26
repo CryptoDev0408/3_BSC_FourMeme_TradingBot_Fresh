@@ -59,43 +59,32 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 			text += `Total: ${transactions.length} | ✅ Success: ${successTxs.length} | ❌ Failed: ${failedTxs.length}\n`;
 			text += `🟢 Buys: ${buyTxs.length} | 🔴 Sells: ${sellTxs.length}\n\n`;
 
-			text += `<b>Recent Transactions (Last 20):</b>\n\n`;
+			text += `<b>Recent Transactions (Last 10):</b>\n\n`;
 
-			// Show last 20 transactions
-			for (const tx of transactions.slice(0, 20)) {
+			// Show last 10 transactions with compact format
+			for (const tx of transactions.slice(0, 10)) {
 				try {
 					const typeEmoji = tx.type === TransactionType.BUY ? '🟢' : '🔴';
 					const statusEmoji = tx.status === TransactionStatus.SUCCESS ? '✅' : '❌';
 					const walletName = (tx.walletId as any)?.name || 'Unknown';
-					const walletAddress = (tx.walletId as any)?.address || 'Unknown';
 
-					text += `${typeEmoji} ${statusEmoji} <b>${tx.type}</b>\n`;
-
+					// Compact single-line format
+					text += `${typeEmoji}${statusEmoji} <b>${tx.type}</b> | `;
+					
 					if (tx.tokenSymbol) {
-						text += `🪙 Token: ${tx.tokenSymbol}\n`;
+						text += `${tx.tokenSymbol} | `;
 					}
 
-					if (tx.tokenAddress) {
-						text += `📍 Token CA: <code>${tx.tokenAddress}</code>\n`;
-					}
-
-					text += `💵 Amount: ${formatBnb(tx.amountBnb)} BNB\n`;
-
-					if (tx.amountToken && typeof tx.amountToken === 'number') {
-						text += `🎯 Tokens: ${tx.amountToken.toFixed(2)}\n`;
-					}
+					text += `${formatBnb(tx.amountBnb)} BNB`;
 
 					if (tx.gasFee) {
-						text += `⛽ Gas: ${formatBnb(tx.gasFee)} BNB\n`;
+						text += ` (⛽${formatBnb(tx.gasFee)})`;
 					}
 
-					text += `💼 Wallet: ${walletName}\n`;
-					text += `👛 Address: <code>${walletAddress}</code>\n`;
-					text += `📅 ${tx.timestamp.toLocaleDateString()} ${tx.timestamp.toLocaleTimeString()}\n`;
+					text += `\n💼 ${walletName} | ${tx.timestamp.toLocaleDateString()}\n`;
 
-					if (tx.status === TransactionStatus.SUCCESS && tx.txHash && !tx.txHash.startsWith('FAILED')) {
-						text += `🔗 TxHash: <code>${tx.txHash}</code>\n`;
-						text += `⚠️ ${tx.errorMessage.substring(0, 50)}...\n`;
+					if (tx.status === TransactionStatus.FAILED && tx.errorMessage) {
+						text += `⚠️ ${tx.errorMessage.substring(0, 40)}...\n`;
 					}
 
 					text += '\n';
@@ -105,8 +94,8 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 				}
 			}
 
-			if (transactions.length > 20) {
-				text += `... and ${transactions.length - 20} more transactions\n`;
+			if (transactions.length > 10) {
+				text += `... +${transactions.length - 10} more transactions\n`;
 			}
 		}
 
@@ -215,41 +204,31 @@ export async function showFilteredTransactions(
 		} else {
 			text += `Found ${transactions.length} transaction(s)\n\n`;
 
-			for (const tx of transactions.slice(0, 15)) {
+			// Show only 10 transactions with compact format
+			for (const tx of transactions.slice(0, 10)) {
 				const typeEmoji = tx.type === TransactionType.BUY ? '🟢' : '🔴';
 				const statusEmoji = tx.status === TransactionStatus.SUCCESS ? '✅' : '❌';
+				const walletName = (tx.walletId as any)?.name || 'Unknown';
 
-				text += `${typeEmoji} ${statusEmoji} <b>${tx.type}</b>\n`;
+				// Ultra compact format
+				text += `${typeEmoji}${statusEmoji} <b>${tx.type}</b> | `;
 
 				if (tx.tokenSymbol) {
-					text += `🪙 ${tx.tokenSymbol}\n`;
+					text += `${tx.tokenSymbol} | `;
 				}
 
-				if (tx.tokenAddress) {
-					text += `📍 Token CA: <code>${tx.tokenAddress}</code>\n`;
-				}
-
-				text += `💵 ${formatBnb(tx.amountBnb)} BNB`;
-
-				if (tx.amountToken) {
-					text += ` → ${tx.amountToken.toFixed(2)} tokens`;
-				}
-
-				text += `\n📅 ${tx.timestamp.toLocaleDateString()}\n`;
-
-				if (tx.status === TransactionStatus.SUCCESS && tx.txHash && !tx.txHash.startsWith('FAILED')) {
-					text += `🔗 TxHash: <code>${tx.txHash}</code>\n`;
-				}
+				text += `${formatBnb(tx.amountBnb)} BNB\n`;
+				text += `💼 ${walletName} | ${tx.timestamp.toLocaleDateString()}\n`;
 
 				if (tx.status === TransactionStatus.FAILED && tx.errorMessage) {
-					text += `⚠️ ${tx.errorMessage.substring(0, 40)}...\n`;
+					text += `⚠️ ${tx.errorMessage.substring(0, 35)}...\n`;
 				}
 
 				text += '\n';
 			}
 
-			if (transactions.length > 15) {
-				text += `... and ${transactions.length - 15} more\n`;
+			if (transactions.length > 10) {
+				text += `... +${transactions.length - 10} more\n`;
 			}
 		}
 

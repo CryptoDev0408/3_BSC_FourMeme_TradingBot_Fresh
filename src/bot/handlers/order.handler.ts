@@ -279,12 +279,19 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 		);
 
 		if (messageId) {
-			await getBot().editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				await getBot().editMessageText(text, {
+					chat_id: chatId,
+					message_id: messageId,
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+				});
+			} catch (editError: any) {
+				// Ignore "message is not modified" errors - this is fine
+				if (!editError.message?.includes('message is not modified')) {
+					throw editError;
+				}
+			}
 		} else {
 			await getBot().sendMessage(chatId, text, {
 				parse_mode: 'HTML',
@@ -378,12 +385,19 @@ export async function showOrderPositions(chatId: string, orderId: string, messag
 		);
 
 		if (messageId) {
-			await getBot().editMessageText(text, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				await getBot().editMessageText(text, {
+					chat_id: chatId,
+					message_id: messageId,
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+				});
+			} catch (editError: any) {
+				// Ignore "message is not modified" errors - this is fine
+				if (!editError.message?.includes('message is not modified')) {
+					throw editError;
+				}
+			}
 		} else {
 			await getBot().sendMessage(chatId, text, {
 				parse_mode: 'HTML',

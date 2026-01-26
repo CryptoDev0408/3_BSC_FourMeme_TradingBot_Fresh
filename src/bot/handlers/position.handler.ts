@@ -49,33 +49,31 @@ export async function showPositionsList(chatId: string, messageId?: number): Pro
 
 			if (activePositions.length > 0) {
 				text += `🟢 <b>Active Positions (${activePositions.length})</b>\n\n`;
-				for (const position of activePositions) {
+				// Limit to 10 active positions for display
+				const displayedActive = activePositions.slice(0, 10);
+				for (const position of displayedActive) {
 					const pnlEmoji = position.pnlPercent >= 0 ? '📈' : '📉';
 					const pnlSign = position.pnlPercent >= 0 ? '+' : '';
-					const statusEmoji = '🟢';
-
-					text += `${statusEmoji} <b>${position.tokenSymbol}</b>\n`;
-					text += `💵 Value: ${formatBnb(position.buyAmount)} BNB\n`;
-					text += `${pnlEmoji} PNL: ${pnlSign}${formatPercent(position.pnlPercent)}% (${pnlSign}${formatBnb(position.pnlBnb)} BNB)\n`;
-					text += `📅 Opened: ${position.buyTimestamp.toLocaleDateString()}\n\n`;
+					// Compact format
+					text += `🟢 <b>${position.tokenSymbol}</b> | ${formatBnb(position.buyAmount)} BNB\n`;
+					text += `${pnlEmoji} ${pnlSign}${formatPercent(position.pnlPercent)}% (${pnlSign}${formatBnb(position.pnlBnb)})\n\n`;
+				}
+				if (activePositions.length > 10) {
+					text += `... and ${activePositions.length - 10} more active positions\n\n`;
 				}
 			}
 
 			if (closedPositions.length > 0) {
 				text += `\n🔴 <b>Closed Positions (${closedPositions.length})</b>\n\n`;
-				for (const position of closedPositions.slice(0, 5)) {
-					// Show last 5 closed
+				// Show only last 3 closed positions with compact format
+				for (const position of closedPositions.slice(0, 3)) {
 					const pnlEmoji = position.pnlPercent >= 0 ? '📈' : '📉';
 					const pnlSign = position.pnlPercent >= 0 ? '+' : '';
-					const statusEmoji = position.status === PositionStatus.CLOSED ? '🔴' : '❌';
-
-					text += `${statusEmoji} <b>${position.tokenSymbol}</b>\n`;
-					text += `💵 Value: ${formatBnb(position.buyAmount)} BNB\n`;
-					text += `${pnlEmoji} PNL: ${pnlSign}${formatPercent(position.pnlPercent)}% (${pnlSign}${formatBnb(position.pnlBnb)} BNB)\n`;
-					text += `📅 Closed: ${position.sellTimestamp?.toLocaleDateString() || 'N/A'}\n\n`;
+					// Ultra compact format
+					text += `🔴 <b>${position.tokenSymbol}</b> | ${pnlEmoji} ${pnlSign}${formatPercent(position.pnlPercent)}%\n`;
 				}
-				if (closedPositions.length > 5) {
-					text += `... and ${closedPositions.length - 5} more closed positions\n`;
+				if (closedPositions.length > 3) {
+					text += `... +${closedPositions.length - 3} more closed\n`;
 				}
 			}
 		}
