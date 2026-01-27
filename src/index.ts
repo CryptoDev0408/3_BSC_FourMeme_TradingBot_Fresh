@@ -1,12 +1,15 @@
 import { config, validateConfig } from './config/config';
 import { database } from './database/connection';
 import { logger } from './utils/logger';
-import { initializeBot, stopBot } from './bot';
+import { initializeBot, stopBot, bot } from './bot';
 import { initializeProvider } from './core/wallet';
 import { positionManager } from './core/position/position.manager';
 import { tpslMonitor } from './services/tpsl.monitor';
 import { pnlMonitorEngine } from './services/pnl.monitor';
 import { transactionQueue } from './core/classes';
+import { scannerService } from './services/scanner.service';
+import { sendTokenAlert } from './bot/handlers/scanner.handler';
+import { User } from './database/models';
 
 /**
  * Main application entry point
@@ -73,6 +76,31 @@ async function main() {
 		// Initialize Telegram Bot
 		await initializeBot();
 
+		// Start Scanner Service (runs in background)
+		if (config.monitoring.scannerEnabled) {
+			logger.info('🔍 Starting Four.meme Scanner Service...');
+			await scannerService.start();
+
+			// Setup token detection callback
+			scannerService.onTokenDetected(async (tokenData) => {
+				logger.success(`🚨 New token detected: ${tokenData.symbol} (${tokenData.name})`);
+
+				// Send alert to all users
+				try {
+					const users = await User.find();
+					for (const user of users) {
+						await sendTokenAlert(user.chatId, tokenData);
+					}
+				} catch (error: any) {
+					logger.error('Error sending token alerts:', error.message);
+				}
+			});
+
+			logger.success('✅ Scanner Service started');
+		} else {
+			logger.info('⏸️  Scanner Service disabled in config');
+		}
+
 		logger.success('🎉 Bot started successfully!');
 		logger.info('📱 Bot ready to receive commands');
 		logger.info('🔗 BSC RPC: ' + config.bsc.rpcHttpUrl);
@@ -85,6 +113,9 @@ async function main() {
 		// Graceful shutdown
 		process.on('SIGINT', async () => {
 			logger.info('📦 Shutting down gracefully...');
+			if (config.monitoring.scannerEnabled) {
+				await scannerService.stop();
+			}
 			await transactionQueue.stop();
 			pnlMonitorEngine.stop();
 			tpslMonitor.stop();

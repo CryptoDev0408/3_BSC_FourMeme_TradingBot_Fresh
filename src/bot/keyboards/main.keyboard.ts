@@ -15,7 +15,7 @@ export function getMainMenuKeyboard(): InlineKeyboardMarkup {
 				{ text: '� Transactions', callback_data: 'transactions' },
 			],
 			[
-				{ text: '🔍 Scanner', callback_data: 'scanner' },
+				{ text: '🪙 Tokens', callback_data: 'scanner' },
 				{ text: 'ℹ️ Help', callback_data: 'help' },
 			],
 		],

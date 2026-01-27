@@ -70,7 +70,7 @@ export async function showTransactionsList(chatId: string, messageId?: number): 
 
 					// Compact single-line format
 					text += `${typeEmoji}${statusEmoji} <b>${tx.type}</b> | `;
-					
+
 					if (tx.tokenSymbol) {
 						text += `${tx.tokenSymbol} | `;
 					}

@@ -82,6 +82,13 @@ import {
 	showFilteredTransactions,
 	setBotInstance as setTransactionBotInstance,
 } from './handlers/transaction.handler';
+import {
+	showScannerMenu,
+	showTokenDetail,
+	showScannerStats,
+	sendTokenAlert,
+	setBotInstance as setScannerBotInstance,
+} from './handlers/scanner.handler';
 
 /**
  * Telegram Bot Instance
@@ -104,6 +111,7 @@ export async function initializeBot(): Promise<void> {
 		setOrderBotInstance(bot);
 		setPositionBotInstance(bot);
 		setTransactionBotInstance(bot);
+		setScannerBotInstance(bot);
 
 		// Setup handlers
 		setupCommandHandlers();
@@ -549,20 +557,14 @@ function setupCallbackHandlers(): void {
 				const filter = data.replace('txs_filter_', '') as 'buy' | 'sell' | 'success' | 'failed';
 				await showFilteredTransactions(chatId, filter, query.message?.message_id);
 			} else if (data === 'scanner') {
-				if (query.message?.message_id) {
-					await bot.deleteMessage(chatId, query.message.message_id);
-				}
-				const scannerStatus = config.monitoring.scannerEnabled ? '🟢 Active' : '🔴 Inactive';
-				await bot.sendMessage(
-					chatId,
-					`🔍 <b>Four.meme Scanner Status</b>\n\nStatus: ${scannerStatus}\n\n⏳ Scanner coming soon in next steps...`,
-					{
-						parse_mode: 'HTML',
-						reply_markup: {
-							inline_keyboard: [[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]],
-						},
-					}
-				);
+				await showScannerMenu(chatId, query.message?.message_id);
+			} else if (data === 'scanner_refresh') {
+				await showScannerMenu(chatId, query.message?.message_id);
+			} else if (data === 'scanner_stats') {
+				await showScannerStats(chatId, query.message?.message_id);
+			} else if (data.startsWith('scanner_token_')) {
+				const tokenAddress = data.replace('scanner_token_', '');
+				await showTokenDetail(chatId, tokenAddress, query.message?.message_id);
 			} else if (data === 'help') {
 				if (query.message?.message_id) {
 					await bot.deleteMessage(chatId, query.message.message_id);
