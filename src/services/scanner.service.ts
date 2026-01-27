@@ -2,7 +2,10 @@ import { ethers } from 'ethers';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
 import { ScannedToken, IScannedToken } from '../database/models/scanned-token.model';
+import { Order } from '../database/models/order.model';
+import { IWallet } from '../database/models/wallet.model';
 import { getProvider } from '../core/wallet';
+import { executeBuyOrder } from '../core/order/order.executor';
 
 /**
  * Scanner Service
@@ -191,6 +194,9 @@ class ScannerService {
 
 			logger.success(`✅ Saved token ${symbol} to database`);
 
+			// Execute auto-buys for this token
+			await this.executeAutoBuys(checksumAddress, symbol);
+
 			// Trigger callback if set
 			if (this.onTokenDetectedCallback) {
 				const tokenData: TokenDetectionData = {
@@ -244,6 +250,81 @@ class ScannerService {
 		} catch (error: any) {
 			logger.error('Error counting scanned tokens:', error.message);
 			return 0;
+		}
+	}
+
+	/**
+	 * Execute auto-buys for detected token
+	 * Finds active orders with autoBuy ON, sorts by gas and amount, executes with delays
+	 */
+	private async executeAutoBuys(tokenAddress: string, tokenSymbol: string): Promise<void> {
+		try {
+			logger.info(`🤖 Checking for auto-buy orders...`);
+
+			// Find active orders with autoBuy enabled
+			const activeOrders = await Order.find({
+				isActive: true,
+				autoBuy: true,
+			})
+				.populate('walletId')
+				.sort({
+					'gasFee.gasPrice': -1, // Highest gas first (fastest)
+					tradingAmount: -1, // Largest amounts first
+				})
+				.lean();
+
+			if (activeOrders.length === 0) {
+				logger.info('No active auto-buy orders found');
+				return;
+			}
+
+			logger.success(`✅ Found ${activeOrders.length} auto-buy order(s)`);
+
+			// Execute each order with 250ms delay between them
+			for (let i = 0; i < activeOrders.length; i++) {
+				const order = activeOrders[i] as any;
+				const wallet = order.walletId as IWallet;
+
+				if (!wallet) {
+					logger.error(`❌ Order ${order._id} has invalid wallet`);
+					continue;
+				}
+
+				const orderNumber = i + 1;
+				logger.info(
+					`🚀 [${orderNumber}/${activeOrders.length}] Executing auto-buy for Order: ${order.name} | Wallet: ${wallet.address.substring(0, 10)}... | Amount: ${order.tradingAmount} BNB | Gas: ${order.gasFee.gasPrice} Gwei`
+				);
+
+				try {
+					// Execute the buy order
+					const result = await executeBuyOrder(order, wallet, tokenAddress);
+
+					if (result.success) {
+						logger.success(
+							`✅ [${orderNumber}/${activeOrders.length}] Auto-buy successful! TX: ${result.txHash}`
+						);
+					} else {
+						logger.error(
+							`❌ [${orderNumber}/${activeOrders.length}] Auto-buy failed: ${result.error}`
+						);
+					}
+				} catch (error: any) {
+					logger.error(
+						`❌ [${orderNumber}/${activeOrders.length}] Auto-buy execution error:`,
+						error.message
+					);
+				}
+
+				// Add 250ms delay before next order (except for last one)
+				if (i < activeOrders.length - 1) {
+					logger.info(`⏳ Waiting 250ms before next order...`);
+					await new Promise((resolve) => setTimeout(resolve, 250));
+				}
+			}
+
+			logger.success(`✅ Completed ${activeOrders.length} auto-buy order(s) for ${tokenSymbol}`);
+		} catch (error: any) {
+			logger.error('Error executing auto-buys:', error.message);
 		}
 	}
 }
