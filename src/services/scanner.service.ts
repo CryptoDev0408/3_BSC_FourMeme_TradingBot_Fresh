@@ -10,15 +10,13 @@ import { getProvider } from '../core/wallet';
  */
 class ScannerService {
 	private isRunning = false;
-	private provider: ethers.providers.JsonRpcProvider | null = null;
-	private scanInterval: NodeJS.Timeout | null = null;
-	private lastScannedBlock = 0;
+	private wsProvider: ethers.providers.WebSocketProvider | null = null;
+	private httpProvider: ethers.providers.JsonRpcProvider | null = null;
 	private onTokenDetectedCallback: ((tokenData: TokenDetectionData) => void) | null = null;
 
 	// Four.Meme Contract on BSC
 	private readonly FOUR_MEME_FACTORY_ADDRESS = '0x5c952063c7fc8610FFDB798152D69F0B9550762b';
 	private readonly ADD_LIQ_METHOD_ID = '0xe3412e3d'; // addLiquidity(address)
-	private readonly SCAN_INTERVAL_MS = 3000; // Check every 3 seconds
 
 	// ERC20 ABI for token details
 	private readonly ERC20_ABI = [
@@ -40,22 +38,33 @@ class ScannerService {
 		try {
 			logger.info('🔍 Starting Four.meme Scanner...');
 
-			// Create HTTP provider (more reliable than WebSocket)
-			this.provider = new ethers.providers.JsonRpcProvider(config.bsc.rpcHttpUrl);
+			// Create WebSocket provider for REAL-TIME block events
+			const wsUrl = config.bsc.rpcWssUrl;
+			logger.info(`Connecting to WebSocket: ${wsUrl}`);
 
-			// Get current block number
-			this.lastScannedBlock = await this.provider.getBlockNumber();
-			logger.info(`Starting scan from block ${this.lastScannedBlock}`);
+			this.wsProvider = new ethers.providers.WebSocketProvider(wsUrl);
 
-			// Start polling for new blocks
-			this.scanInterval = setInterval(() => {
-				this.pollNewBlocks().catch((error) => {
-					logger.error('Error in poll loop:', error.message);
-				});
-			}, this.SCAN_INTERVAL_MS);
+			// Create HTTP provider as backup for token data fetching
+			this.httpProvider = new ethers.providers.JsonRpcProvider(config.bsc.rpcHttpUrl);
+
+			// Setup WebSocket error handlers
+			this.wsProvider._websocket.on('error', (error: any) => {
+				logger.error('🔴 WebSocket error:', error.message);
+			});
+
+			this.wsProvider._websocket.on('close', () => {
+				logger.warning('⚠️ WebSocket connection closed');
+			});
+
+			// Listen for new blocks in REAL-TIME (like Alert Engine)
+			this.wsProvider.on('block', async (blockNumber) => {
+				logger.info(`🔍 NEW BLOCK: ${blockNumber} - Scanning...`);
+				await this.scanBlock(blockNumber);
+			});
 
 			this.isRunning = true;
-			logger.success('✅ Scanner started successfully (HTTP polling mode)');
+			logger.success('✅ Scanner started successfully (WebSocket real-time mode)');
+			logger.success('⚡ Real-time block detection active!');
 		} catch (error: any) {
 			logger.error('❌ Failed to start scanner:', error.message);
 			throw error;
@@ -73,12 +82,13 @@ class ScannerService {
 		try {
 			logger.info('🛑 Stopping scanner...');
 
-			if (this.scanInterval) {
-				clearInterval(this.scanInterval);
-				this.scanInterval = null;
+			if (this.wsProvider) {
+				this.wsProvider.removeAllListeners();
+				await this.wsProvider.destroy();
+				this.wsProvider = null;
 			}
 
-			this.provider = null;
+			this.httpProvider = null;
 			this.isRunning = false;
 			logger.success('✅ Scanner stopped');
 		} catch (error: any) {
@@ -94,41 +104,15 @@ class ScannerService {
 	}
 
 	/**
-	 * Poll for new blocks
-	 */
-	private async pollNewBlocks(): Promise<void> {
-		try {
-			if (!this.provider) return;
-
-			const currentBlock = await this.provider.getBlockNumber();
-
-			// Check if there are new blocks
-			if (currentBlock > this.lastScannedBlock) {
-				logger.info(`🔍 Scanning blocks ${this.lastScannedBlock + 1} to ${currentBlock}`);
-
-				// Scan each new block
-				for (let blockNum = this.lastScannedBlock + 1; blockNum <= currentBlock; blockNum++) {
-					await this.scanBlock(blockNum);
-				}
-
-				this.lastScannedBlock = currentBlock;
-				logger.info(`✅ Scanned up to block ${currentBlock}`);
-			}
-		} catch (error: any) {
-			logger.error('Error polling new blocks:', error.message);
-		}
-	}
-
-	/**
 	 * Scan a specific block for migrations
 	 */
 	private async scanBlock(blockNumber: number): Promise<void> {
 		try {
-			if (!this.provider) {
+			if (!this.wsProvider) {
 				return;
 			}
 
-			const block = await this.provider.getBlockWithTransactions(blockNumber);
+			const block = await this.wsProvider.getBlockWithTransactions(blockNumber);
 			let fourMemeDetections = 0;
 
 			for (const tx of block.transactions) {
@@ -178,10 +162,10 @@ class ScannerService {
 				return;
 			}
 
-			// Get token information using HTTP provider for reliability
-			const httpProvider = getProvider();
+			// Use HTTP provider for token data (more reliable than WebSocket for contract calls)
+			const provider = this.httpProvider || getProvider();
 			const checksumAddress = ethers.utils.getAddress(tokenAddress);
-			const tokenContract = new ethers.Contract(checksumAddress, this.ERC20_ABI, httpProvider);
+			const tokenContract = new ethers.Contract(checksumAddress, this.ERC20_ABI, provider);
 
 			// Fetch token details
 			const [name, symbol, decimals, totalSupply] = await Promise.all([
