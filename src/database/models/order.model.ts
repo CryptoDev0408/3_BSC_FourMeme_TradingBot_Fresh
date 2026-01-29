@@ -14,6 +14,8 @@ export interface IOrder extends Document {
 	takeProfitEnabled: boolean;
 	stopLossPercent: number;
 	stopLossEnabled: boolean;
+	timeLimitEnabled: boolean;
+	timeLimitSeconds: number;
 	gasFee: {
 		gasPrice: string;
 		gasLimit: number;
@@ -80,6 +82,16 @@ const OrderSchema = new Schema<IOrder>(
 			type: Boolean,
 			default: true,
 		},
+		timeLimitEnabled: {
+			type: Boolean,
+			default: false,
+		},
+		timeLimitSeconds: {
+			type: Number,
+			min: 10,
+			max: 86400,
+			default: 300,
+		},
 		gasFee: {
 			gasPrice: {
 				type: String,
@@ -116,6 +128,7 @@ OrderSchema.index({ walletId: 1, isActive: 1 });
 OrderSchema.methods.getSummary = function (this: IOrder): string {
 	const tpStatus = this.takeProfitEnabled ? `✅ ${this.takeProfitPercent}%` : '❌ OFF';
 	const slStatus = this.stopLossEnabled ? `✅ ${this.stopLossPercent}%` : '❌ OFF';
+	const timeLimitStatus = this.timeLimitEnabled ? `✅ ${this.timeLimitSeconds}s` : '❌ OFF';
 	const status = this.isActive ? '🟢 ACTIVE' : '🔴 INACTIVE';
 
 	return `
@@ -123,6 +136,7 @@ Status: ${status}
 Trading Amount: ${this.tradingAmount} BNB
 Take Profit: ${tpStatus}
 Stop Loss: ${slStatus}
+Time Limit: ${timeLimitStatus}
 Gas Price: ${this.gasFee.gasPrice} Gwei
   `.trim();
 };

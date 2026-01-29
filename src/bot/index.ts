@@ -54,6 +54,8 @@ import {
 	showTPSLSettings,
 	toggleTPEnabled,
 	toggleSLEnabled,
+	toggleTimeLimitEnabled,
+	handleTimeLimitInput,
 	showTPSelection,
 	showSLSelection,
 	handleSetTP,
@@ -498,6 +500,12 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('order_sltoggle_')) {
 				const orderId = data.replace('order_sltoggle_', '');
 				await toggleSLEnabled(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_timelimittoggle_')) {
+				const orderId = data.replace('order_timelimittoggle_', '');
+				await toggleTimeLimitEnabled(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_timelimit_input_')) {
+				const orderId = data.replace('order_timelimit_input_', '');
+				await handleTimeLimitInput(chatId, orderId, query.message?.message_id);
 			} else if (data.startsWith('order_settp_')) {
 				const parts = data.split('_');
 				const orderId = parts[2];

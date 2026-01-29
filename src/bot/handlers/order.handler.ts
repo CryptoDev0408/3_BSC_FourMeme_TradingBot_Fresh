@@ -191,6 +191,7 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 		text += `💵 Trading Amount: ${formatBnb(order.tradingAmount)} BNB\n`;
 		text += `🎯 Take Profit: ${order.takeProfitPercent}% ${formatToggle(order.takeProfitEnabled)}\n`;
 		text += `🛑 Stop Loss: ${order.stopLossPercent}% ${formatToggle(order.stopLossEnabled)}\n`;
+		text += `⏱ Time Limit: ${order.timeLimitSeconds}s ${formatToggle(order.timeLimitEnabled)}\n`;
 		text += `⚡ Gas Price: ${order.gasFee.gasPrice} Gwei\n`;
 		text += `📊 Slippage: ${order.slippage}%\n\n`;
 
@@ -234,12 +235,20 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 					},
 					{ text: `${order.stopLossPercent}%`, callback_data: `order_sl_input_${orderId}` },
 				],
-				// Row 5: Gas Settings
+				// Row 5: Time Limit Settings
+				[
+					{
+						text: order.timeLimitEnabled ? '✅ Time Limit' : '❌ Time Limit',
+						callback_data: `order_timelimittoggle_${orderId}`
+					},
+					{ text: `${order.timeLimitSeconds}s`, callback_data: `order_timelimit_input_${orderId}` },
+				],
+				// Row 6: Gas Settings
 				[
 					{ text: '⚡ Gas Settings', callback_data: `order_gas_label_${orderId}` },
 					{ text: `${order.gasFee.gasPrice} Gwei`, callback_data: `order_gas_input_${orderId}` },
 				],
-				// Row 6: Slippage
+				// Row 7: Slippage
 				[
 					{ text: '📊 Slippage', callback_data: `order_slippage_label_${orderId}` },
 					{ text: `${order.slippage}%`, callback_data: `order_slippage_input_${orderId}` },
@@ -2095,6 +2104,33 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 			return true;
 		}
 
+		// Handle direct time limit input
+		if (state.action === 'order_timelimit_input') {
+			const seconds = parseInt(text);
+			if (isNaN(seconds) || seconds < 10 || seconds > 86400) {
+				await getBot().sendMessage(chatId, '❌ Invalid time limit. Must be between 10 and 86400 seconds (24 hours).');
+				return true;
+			}
+
+			const user = await User.findOne({ chatId });
+			if (!user || !state.orderId) {
+				await getBot().sendMessage(chatId, '❌ Order not found.');
+				userStates.delete(chatId);
+				return true;
+			}
+
+			const result = await updateOrderConfig(state.orderId, user._id.toString(), { timeLimitSeconds: seconds });
+			if (!result.success) {
+				await getBot().sendMessage(chatId, `❌ ${result.error}`);
+			} else {
+				await getBot().sendMessage(chatId, '✅ Time limit updated!');
+				await showOrderDetail(chatId, state.orderId);
+			}
+
+			userStates.delete(chatId);
+			return true;
+		}
+
 		// Handle direct slippage input
 		if (state.action === 'order_slippage_input') {
 			const slippage = parseFloat(text);
@@ -2388,6 +2424,61 @@ export async function toggleSLEnabled(chatId: string, orderId: string, messageId
 		await showTPSLSettings(chatId, orderId, messageId);
 	} catch (error: any) {
 		logger.error('Failed to toggle SL:', error.message);
+	}
+}
+
+/**
+ * Toggle Time Limit enabled
+ */
+export async function toggleTimeLimitEnabled(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const user = await User.findOne({ chatId });
+		if (!user) return;
+
+		const order = await getOrderById(orderId, user._id.toString());
+		if (!order) return;
+
+		await updateOrderConfig(orderId, user._id.toString(), {
+			timeLimitEnabled: !order.timeLimitEnabled,
+		});
+
+		await showOrderDetail(chatId, orderId, messageId);
+	} catch (error: any) {
+		logger.error('Failed to toggle Time Limit:', error.message);
+	}
+}
+
+/**
+ * Handle time limit input request
+ */
+export async function handleTimeLimitInput(chatId: string, orderId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '⏱ <b>Time Limit Configuration</b>\n\nEnter time limit in seconds (10-86400):\n\n<i>Example: 300 (5 minutes)</i>';
+
+		userStates.set(chatId, {
+			action: 'order_timelimit_input',
+			orderId,
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: `order_view_${orderId}` }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to handle time limit input:', error.message);
 	}
 }
 

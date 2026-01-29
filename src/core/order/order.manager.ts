@@ -119,6 +119,8 @@ export async function updateOrderConfig(
 		takeProfitEnabled?: boolean;
 		stopLossPercent?: number;
 		stopLossEnabled?: boolean;
+		timeLimitEnabled?: boolean;
+		timeLimitSeconds?: number;
 		slippage?: number;
 		autoBuy?: boolean;
 		gasFee?: {
@@ -149,15 +151,15 @@ export async function updateOrderConfig(
 		if (config.takeProfitEnabled !== undefined) order.takeProfitEnabled = config.takeProfitEnabled;
 		if (config.stopLossPercent !== undefined) order.stopLossPercent = config.stopLossPercent;
 		if (config.stopLossEnabled !== undefined) order.stopLossEnabled = config.stopLossEnabled;
-		if (config.slippage !== undefined) order.slippage = config.slippage;
+		if (config.timeLimitEnabled !== undefined) order.timeLimitEnabled = config.timeLimitEnabled;
+		if (config.timeLimitSeconds !== undefined) order.timeLimitSeconds = config.timeLimitSeconds; if (config.slippage !== undefined) order.slippage = config.slippage;
 		if (config.autoBuy !== undefined) order.autoBuy = config.autoBuy;
 		if (config.gasFee?.gasPrice !== undefined) order.gasFee.gasPrice = config.gasFee.gasPrice;
 		if (config.gasFee?.gasLimit !== undefined) order.gasFee.gasLimit = config.gasFee.gasLimit;
 
 		await order.save();
 
-		logger.info(`Order updated: ${orderId}`);
-		return { success: true, order };
+		logger.info(`Order updated: ${orderId}`); return { success: true, order };
 	} catch (error: any) {
 		logger.error('Failed to update order:', error.message);
 		return { success: false, error: error.message };

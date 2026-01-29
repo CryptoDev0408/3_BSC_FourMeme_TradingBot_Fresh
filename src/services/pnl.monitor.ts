@@ -18,6 +18,7 @@ interface PositionPNL {
 	pnlBnb: number;
 	shouldTakeProfit: boolean;
 	shouldStopLoss: boolean;
+	shouldTimeLimitSell: boolean;
 }
 
 /**
@@ -278,10 +279,11 @@ export class PNLMonitorEngine {
 			const pnlPercent = position.getPnLPercent();
 			const pnlBnb = position.getPnL();
 
-			// Get current order to check TP/SL settings (dynamic values)
+			// Get current order to check TP/SL and Time Limit settings (dynamic values)
 			const order = await Order.findById(position.orderId);
 			let shouldTakeProfit = false;
 			let shouldStopLoss = false;
+			let shouldTimeLimitSell = false;
 
 			if (order) {
 				// Check TP/SL with current order values
@@ -290,6 +292,15 @@ export class PNLMonitorEngine {
 				}
 				if (order.stopLossEnabled && order.stopLossPercent) {
 					shouldStopLoss = pnlPercent <= -order.stopLossPercent;
+				}
+
+				// Check Time Limit (only for non-manual positions)
+				// Get position from database to check isManual flag
+				const dbPosition = await Position.findById(position.id);
+				if (order.timeLimitEnabled && dbPosition && !dbPosition.isManual) {
+					const timeElapsedMs = Date.now() - position.buyTimestamp.getTime();
+					const timeElapsedSec = timeElapsedMs / 1000;
+					shouldTimeLimitSell = timeElapsedSec >= order.timeLimitSeconds;
 				}
 			}
 
@@ -303,6 +314,7 @@ export class PNLMonitorEngine {
 				pnlBnb,
 				shouldTakeProfit,
 				shouldStopLoss,
+				shouldTimeLimitSell,
 			};
 		} catch (error: any) {
 			logger.error(`Failed to process position ${position.id}: ${error.message}`);
@@ -406,10 +418,10 @@ export class PNLMonitorEngine {
 	}
 
 	/**
-	 * Execute TP/SL for triggered positions
+	 * Execute TP/SL/Time Limit for triggered positions
 	 */
 	private async executeTriggeredPositions(pnlData: PositionPNL[]): Promise<void> {
-		const triggered = pnlData.filter((p) => p.shouldTakeProfit || p.shouldStopLoss);
+		const triggered = pnlData.filter((p) => p.shouldTakeProfit || p.shouldStopLoss || p.shouldTimeLimitSell);
 
 		if (triggered.length === 0) {
 			return;
@@ -422,22 +434,27 @@ export class PNLMonitorEngine {
 		const batches = this.chunkArray(triggered, batchSize);
 
 		for (const batch of batches) {
-			const executePromises = batch.map((pnl) =>
-				this.executeSell(
-					pnl.positionId,
-					pnl.shouldTakeProfit ? 'TAKE_PROFIT' : 'STOP_LOSS'
-				)
-			);
+			const executePromises = batch.map((pnl) => {
+				let reason: 'TAKE_PROFIT' | 'STOP_LOSS' | 'TIME_LIMIT';
+				if (pnl.shouldTakeProfit) {
+					reason = 'TAKE_PROFIT';
+				} else if (pnl.shouldStopLoss) {
+					reason = 'STOP_LOSS';
+				} else {
+					reason = 'TIME_LIMIT';
+				}
+				return this.executeSell(pnl.positionId, reason);
+			});
 			await Promise.all(executePromises);
 		}
 	}
 
 	/**
-	 * Execute sell for TP/SL
+	 * Execute sell for TP/SL/Time Limit
 	 */
 	private async executeSell(
 		positionId: string,
-		reason: 'TAKE_PROFIT' | 'STOP_LOSS'
+		reason: 'TAKE_PROFIT' | 'STOP_LOSS' | 'TIME_LIMIT'
 	): Promise<boolean> {
 		try {
 			const position = positionManager.getPosition(positionId);
@@ -632,7 +649,9 @@ export class PNLMonitorEngine {
 					? '🎯 Take Profit'
 					: reason === 'STOP_LOSS'
 						? '🛑 Stop Loss'
-						: '👤 Manual Sell';
+						: reason === 'TIME_LIMIT'
+							? '⏱ Time Limit'
+							: '👤 Manual Sell';
 
 			const message =
 				`${emoji} <b>${action} Executed!</b>\n\n` +
