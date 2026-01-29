@@ -102,6 +102,7 @@ export class PNLMonitorEngine {
 
 		try {
 			// Get all open positions from DATABASE (always fresh)
+			// Note: We load ALL positions (including manual) to activate PENDING ones
 			const dbPositions = await Position.find({
 				status: { $in: ['PENDING', 'OPEN', 'ACTIVE'] }
 			}).populate('orderId');
@@ -125,34 +126,42 @@ export class PNLMonitorEngine {
 
 			// Separate PENDING and ACTIVE positions
 			const pendingPositions = allPositions.filter(p => p.status === 'PENDING');
-			const activePositions = allPositions.filter(p => p.status === 'ACTIVE' || p.status === 'OPEN');
+			// EXCLUDE manual positions from ACTIVE monitoring (for TP/SL auto-sell)
+			const activePositions = allPositions.filter(p => (p.status === 'ACTIVE' || p.status === 'OPEN'));
 
 			// Step 1: Process PENDING positions - check token balance
 			if (pendingPositions.length > 0) {
 				await this.processPendingPositions(pendingPositions);
 			}
 
-			// Step 2: Filter active positions to only those with ACTIVE orders
-			const positionOrderIds = new Set(activePositions.map(p => p.orderId));
+			// Step 2: Filter out manual positions from TP/SL auto-sell
+			const dbPositionMap = new Map(dbPositions.map(p => [p._id.toString(), p]));
+			const nonManualActivePositions = activePositions.filter(p => {
+				const dbPos = dbPositionMap.get(p.id);
+				return dbPos && !dbPos.isManual;
+			});
+
+			// Step 3: Filter positions to only those with ACTIVE orders
+			const positionOrderIds = new Set(nonManualActivePositions.map(p => p.orderId));
 			const activeOrders = await Order.find({
 				_id: { $in: Array.from(positionOrderIds) },
 				isActive: true
 			}).select('_id');
 
 			const activeOrderIds = new Set(activeOrders.map(o => o._id.toString()));
-			const positions = activePositions.filter(p => activeOrderIds.has(p.orderId));
+			const positions = nonManualActivePositions.filter(p => activeOrderIds.has(p.orderId));
 
 			if (positions.length === 0) {
-				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No positions with active orders`);
+				console.log(`[${new Date().toLocaleTimeString()}] 📊 PNL Check: No non-manual positions with active orders`);
 				return;
 			}
 
-			// Step 1: Extract unique token addresses
+			// Step 4: Extract unique token addresses for price fetching
 			const tokenAddresses = [...new Set(positions.map((p) => p.token.address))];
 
 			// Silently check positions
 
-			// Step 2: Batch fetch all prices (SINGLE OPTIMIZED CALL)
+			// Step 5: Batch fetch all prices (SINGLE OPTIMIZED CALL)
 			const prices = await this.priceService.getTokenPricesBatch(tokenAddresses);
 
 			if (prices.size === 0) {
@@ -162,7 +171,7 @@ export class PNLMonitorEngine {
 
 			this.pricesFetched = prices.size;
 
-			// Step 3: Process positions in batches (parallel)
+			// Step 6: Process positions in batches (parallel)
 			const batchSize = 50; // Process 50 positions at a time
 			const batches = this.chunkArray(positions, batchSize);
 
@@ -176,10 +185,10 @@ export class PNLMonitorEngine {
 				allPnlData.push(...batchResults.filter((r) => r !== null) as PositionPNL[]);
 			}
 
-			// Step 4: Log PNL summary
+			// Step 7: Log PNL summary
 			this.logPNLSummary(allPnlData);
 
-			// Step 5: Execute TP/SL for triggered positions (AUTO-SELL)
+			// Step 8: Execute TP/SL for triggered positions (AUTO-SELL)
 			await this.executeTriggeredPositions(allPnlData);
 
 			// Stats

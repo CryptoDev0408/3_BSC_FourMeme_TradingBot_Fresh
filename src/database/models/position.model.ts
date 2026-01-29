@@ -38,6 +38,8 @@ export interface IPosition extends Document {
 	takeProfitTarget: number;
 	stopLossTarget: number;
 
+	isManual: boolean;
+
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -160,6 +162,11 @@ const PositionSchema = new Schema<IPosition>(
 		stopLossTarget: {
 			type: Number,
 			default: 0,
+		},
+		isManual: {
+			type: Boolean,
+			default: false,
+			index: true,
 		},
 	},
 	{

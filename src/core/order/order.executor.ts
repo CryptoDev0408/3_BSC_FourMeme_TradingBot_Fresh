@@ -48,10 +48,11 @@ export async function executeBuyOrder(
 			return { success: false, error: 'Invalid token address' };
 		}
 
-		// Check if order is active
-		if (!order.isActive) {
-			return { success: false, error: 'Order is not active' };
-		}
+		// Note: Manual buys don't require order to be active
+		// Check if order is active (skip for manual buys - checked in executeManualBuy)
+		// if (!order.isActive) {
+		// 	return { success: false, error: 'Order is not active' };
+		// }
 
 		// Check wallet balance
 		if (wallet.balance.bnb < order.tradingAmount) {
@@ -190,6 +191,7 @@ export async function executeBuyOrder(
 			status: PositionStatus.PENDING,
 			takeProfitTarget: order.takeProfitPercent,
 			stopLossTarget: order.stopLossPercent,
+			isManual: false,
 		});
 
 		logger.success(`Position created in DB: ${positionDoc._id}`);
@@ -297,7 +299,15 @@ export async function executeManualBuy(
 		}
 
 		// Execute buy
-		return await executeBuyOrder(order, order.walletId, tokenAddress);
+		const result = await executeBuyOrder(order, order.walletId, tokenAddress);
+
+		// Mark position as manual if buy was successful
+		if (result.success && result.positionId) {
+			await Position.findByIdAndUpdate(result.positionId, { isManual: true });
+			logger.info(`Position ${result.positionId} marked as manual`);
+		}
+
+		return result;
 	} catch (error: any) {
 		logger.error('Failed to execute manual buy:', error.message);
 		return { success: false, error: error.message };
