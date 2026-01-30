@@ -187,11 +187,29 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 
 		text += `<b>⚙️ Order Configuration:</b>\n`;
 		text += `💵 Trading Amount: ${formatBnb(order.tradingAmount)} BNB\n`;
-		text += `🎯 Take Profit: ${order.takeProfitPercent}% ${formatToggle(order.takeProfitEnabled)}\n`;
-		text += `🛑 Stop Loss: ${order.stopLossPercent}% ${formatToggle(order.stopLossEnabled)}\n`;
+		text += `📊 Slippage: ${order.slippage}%\n`;
 		text += `⏱ Time Limit: ${order.timeLimitSeconds}s ${formatToggle(order.timeLimitEnabled)}\n`;
-		text += `⚡ Gas Price: ${order.gasFee.gasPrice} Gwei\n`;
-		text += `📊 Slippage: ${order.slippage}%\n\n`;
+		text += `⚡ Gas Price: ${order.gasFee.gasPrice} Gwei\n\n`;
+
+		// Display TP/SL Levels
+		text += `<b>🎯 Take Profit Levels:</b>\n`;
+		if (order.takeProfitLevels && order.takeProfitLevels.length > 0) {
+			order.takeProfitLevels.forEach((level: any, idx: number) => {
+				text += `  ${idx + 1}. At +${level.pnlPercent}% → Sell ${level.sellPercent}%\n`;
+			});
+		} else {
+			text += `  <i>No TP levels set</i>\n`;
+		}
+
+		text += `\n<b>🛑 Stop Loss Levels:</b>\n`;
+		if (order.stopLossLevels && order.stopLossLevels.length > 0) {
+			order.stopLossLevels.forEach((level: any, idx: number) => {
+				text += `  ${idx + 1}. At -${level.pnlPercent}% → Sell ${level.sellPercent}%\n`;
+			});
+		} else {
+			text += `  <i>No SL levels set</i>\n`;
+		}
+		text += `\n`;
 
 		if (order.isActive) {
 			text += `<i>Order is active and monitoring for opportunities</i>`;
@@ -217,11 +235,58 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 					{ text: '💰 Set Trading Amount', callback_data: `order_amount_label_${orderId}` },
 					{ text: `${formatBnb(order.tradingAmount)} BNB`, callback_data: `order_amount_input_${orderId}` },
 				],
-				// Row 3: TP/SL Levels Management (NEW - Multiple TP/SL)
+				// Row 3: Slippage
 				[
-					{ text: '🎯 Manage TP/SL Levels', callback_data: `order_tpsl_${orderId}` },
-				],
-				// Row 5: Time Limit Settings
+					{ text: '📊 Slippage', callback_data: `order_slippage_label_${orderId}` },
+					{ text: `${order.slippage}%`, callback_data: `order_slippage_input_${orderId}` },
+				]
+			);
+
+			// Add TP/SL Levels rows (same format as Create Order page)
+			if (order.takeProfitLevels && order.takeProfitLevels.length > 0) {
+				order.takeProfitLevels.forEach((level: any, idx: number) => {
+					keyboard.inline_keyboard.push([
+						{
+							text: `📈 TP${idx + 1}: +${level.pnlPercent}% → Sell ${level.sellPercent}%`,
+							callback_data: `order_edittp_${orderId}_${idx}`
+						},
+						{
+							text: '🗑',
+							callback_data: `order_deletetp_${orderId}_${idx}`
+						},
+					]);
+				});
+			}
+
+			// Add TP button
+			keyboard.inline_keyboard.push([
+				{ text: '➕ Add Take Profit Level', callback_data: `order_addtp_${orderId}` },
+			]);
+
+			// Add SL levels rows
+			if (order.stopLossLevels && order.stopLossLevels.length > 0) {
+				order.stopLossLevels.forEach((level: any, idx: number) => {
+					keyboard.inline_keyboard.push([
+						{
+							text: `📉 SL${idx + 1}: -${level.pnlPercent}% → Sell ${level.sellPercent}%`,
+							callback_data: `order_editsl_${orderId}_${idx}`
+						},
+						{
+							text: '🗑',
+							callback_data: `order_deletesl_${orderId}_${idx}`
+						},
+					]);
+				});
+			}
+
+			// Add SL button
+			keyboard.inline_keyboard.push([
+				{ text: '➕ Add Stop Loss Level', callback_data: `order_addsl_${orderId}` },
+			]);
+
+			// Time Limit, Gas settings
+			keyboard.inline_keyboard.push(
+				// Row: Time Limit Settings
 				[
 					{
 						text: order.timeLimitEnabled ? '✅ Time Limit' : '❌ Time Limit',
@@ -229,15 +294,10 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 					},
 					{ text: `${order.timeLimitSeconds}s`, callback_data: `order_timelimit_input_${orderId}` },
 				],
-				// Row 6: Gas Settings
+				// Row: Gas Settings
 				[
 					{ text: '⚡ Gas Settings', callback_data: `order_gas_label_${orderId}` },
 					{ text: `${order.gasFee.gasPrice} Gwei`, callback_data: `order_gas_input_${orderId}` },
-				],
-				// Row 7: Slippage
-				[
-					{ text: '📊 Slippage', callback_data: `order_slippage_label_${orderId}` },
-					{ text: `${order.slippage}%`, callback_data: `order_slippage_input_${orderId}` },
 				]
 			);
 		}
