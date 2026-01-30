@@ -19,6 +19,8 @@ interface PositionPNL {
 	shouldTakeProfit: boolean;
 	shouldStopLoss: boolean;
 	shouldTimeLimitSell: boolean;
+	triggeredTpLevels?: Array<{ index: number; pnlPercent: number; sellPercent: number }>;
+	triggeredSlLevels?: Array<{ index: number; pnlPercent: number; sellPercent: number }>;
 }
 
 /**
@@ -284,13 +286,46 @@ export class PNLMonitorEngine {
 			let shouldTakeProfit = false;
 			let shouldStopLoss = false;
 			let shouldTimeLimitSell = false;
+			const triggeredTpLevels: Array<{ index: number; pnlPercent: number; sellPercent: number }> = [];
+			const triggeredSlLevels: Array<{ index: number; pnlPercent: number; sellPercent: number }> = [];
 
 			if (order) {
-				// Check TP/SL with current order values
-				if (order.takeProfitEnabled && order.takeProfitPercent) {
+				// Check MULTIPLE TP/SL levels (new system)
+				if (order.takeProfitLevels && order.takeProfitLevels.length > 0) {
+					// Check each TP level that hasn't been triggered yet
+					for (let i = 0; i < order.takeProfitLevels.length; i++) {
+						const level = order.takeProfitLevels[i];
+						// Skip if already triggered
+						if (position.triggeredTakeProfitLevels?.includes(i)) {
+							continue;
+						}
+						// Check if PNL reached this level
+						if (pnlPercent >= level.pnlPercent) {
+							triggeredTpLevels.push({ index: i, pnlPercent: level.pnlPercent, sellPercent: level.sellPercent });
+							shouldTakeProfit = true;
+						}
+					}
+				} else if (order.takeProfitEnabled && order.takeProfitPercent) {
+					// Backwards compatibility: old single TP system
 					shouldTakeProfit = pnlPercent >= order.takeProfitPercent;
 				}
-				if (order.stopLossEnabled && order.stopLossPercent) {
+
+				if (order.stopLossLevels && order.stopLossLevels.length > 0) {
+					// Check each SL level that hasn't been triggered yet
+					for (let i = 0; i < order.stopLossLevels.length; i++) {
+						const level = order.stopLossLevels[i];
+						// Skip if already triggered
+						if (position.triggeredStopLossLevels?.includes(i)) {
+							continue;
+						}
+						// Check if PNL dropped to this level (negative)
+						if (pnlPercent <= -level.pnlPercent) {
+							triggeredSlLevels.push({ index: i, pnlPercent: level.pnlPercent, sellPercent: level.sellPercent });
+							shouldStopLoss = true;
+						}
+					}
+				} else if (order.stopLossEnabled && order.stopLossPercent) {
+					// Backwards compatibility: old single SL system
 					shouldStopLoss = pnlPercent <= -order.stopLossPercent;
 				}
 
@@ -315,6 +350,8 @@ export class PNLMonitorEngine {
 				shouldTakeProfit,
 				shouldStopLoss,
 				shouldTimeLimitSell,
+				triggeredTpLevels,
+				triggeredSlLevels,
 			};
 		} catch (error: any) {
 			logger.error(`Failed to process position ${position.id}: ${error.message}`);
@@ -418,7 +455,7 @@ export class PNLMonitorEngine {
 	}
 
 	/**
-	 * Execute TP/SL/Time Limit for triggered positions
+	 * Execute TP/SL/Time Limit for triggered positions (supports multiple levels)
 	 */
 	private async executeTriggeredPositions(pnlData: PositionPNL[]): Promise<void> {
 		const triggered = pnlData.filter((p) => p.shouldTakeProfit || p.shouldStopLoss || p.shouldTimeLimitSell);
@@ -429,23 +466,274 @@ export class PNLMonitorEngine {
 
 		logger.info(`🎯 Executing ${triggered.length} triggered positions...`);
 
-		// Execute in parallel (max 5 at a time to avoid overload)
-		const batchSize = 5;
-		const batches = this.chunkArray(triggered, batchSize);
-
-		for (const batch of batches) {
-			const executePromises = batch.map((pnl) => {
-				let reason: 'TAKE_PROFIT' | 'STOP_LOSS' | 'TIME_LIMIT';
-				if (pnl.shouldTakeProfit) {
-					reason = 'TAKE_PROFIT';
-				} else if (pnl.shouldStopLoss) {
-					reason = 'STOP_LOSS';
-				} else {
-					reason = 'TIME_LIMIT';
+		// Execute sequentially to avoid race conditions with position updates
+		for (const pnl of triggered) {
+			try {
+				// Handle Time Limit (always 100% sell)
+				if (pnl.shouldTimeLimitSell) {
+					await this.executeSell(pnl.positionId, 'TIME_LIMIT');
+					continue;
 				}
-				return this.executeSell(pnl.positionId, reason);
+
+				// Handle Multiple TP levels (partial sells)
+				if (pnl.triggeredTpLevels && pnl.triggeredTpLevels.length > 0) {
+					for (const level of pnl.triggeredTpLevels) {
+						await this.executePartialSell(
+							pnl.positionId,
+							'TAKE_PROFIT',
+							level.index,
+							level.sellPercent,
+							level.pnlPercent
+						);
+					}
+					continue;
+				}
+
+				// Handle Multiple SL levels (partial sells)
+				if (pnl.triggeredSlLevels && pnl.triggeredSlLevels.length > 0) {
+					for (const level of pnl.triggeredSlLevels) {
+						await this.executePartialSell(
+							pnl.positionId,
+							'STOP_LOSS',
+							level.index,
+							level.sellPercent,
+							level.pnlPercent
+						);
+					}
+					continue;
+				}
+
+				// Backwards compatibility: single TP/SL (100% sell)
+				if (pnl.shouldTakeProfit) {
+					await this.executeSell(pnl.positionId, 'TAKE_PROFIT');
+				} else if (pnl.shouldStopLoss) {
+					await this.executeSell(pnl.positionId, 'STOP_LOSS');
+				}
+			} catch (error: any) {
+				logger.error(`Failed to execute triggered position ${pnl.positionId}: ${error.message}`);
+			}
+		}
+	}
+
+	/**
+	 * Execute partial sell for specific TP/SL level
+	 */
+	private async executePartialSell(
+		positionId: string,
+		reason: 'TAKE_PROFIT' | 'STOP_LOSS',
+		levelIndex: number,
+		sellPercent: number,
+		pnlPercent: number
+	): Promise<boolean> {
+		try {
+			const position = positionManager.getPosition(positionId);
+			if (!position) {
+				logger.error(`Position not found: ${positionId}`);
+				return false;
+			}
+
+			// Check if already has pending sell transaction
+			if (position.hasPendingSell) {
+				logger.debug(`Position ${positionId} already has pending sell, skipping...`);
+				return false;
+			}
+
+			// Mark as having pending sell
+			position.hasPendingSell = true;
+
+			// Get database position to check if this level already triggered
+			const dbPosition = await Position.findById(positionId);
+			if (!dbPosition) {
+				logger.error(`Database position not found: ${positionId}`);
+				position.hasPendingSell = false;
+				return false;
+			}
+
+			// Check if level already triggered (prevent duplicate execution)
+			const triggeredArray = reason === 'TAKE_PROFIT'
+				? dbPosition.triggeredTakeProfitLevels || []
+				: dbPosition.triggeredStopLossLevels || [];
+
+			if (triggeredArray.includes(levelIndex)) {
+				logger.debug(`Level ${levelIndex} already triggered for position ${positionId}, skipping...`);
+				position.hasPendingSell = false;
+				return false;
+			}
+
+			// Get order
+			const order = await Order.findById(position.orderId);
+			if (!order) {
+				logger.error(`Order not found for position: ${positionId}`);
+				position.hasPendingSell = false;
+				return false;
+			}
+
+			// Get wallet
+			const wallet = await B_Wallet.getById(order.walletId.toString());
+			if (!wallet) {
+				logger.error(`Wallet not found for position: ${positionId}`);
+				position.hasPendingSell = false;
+				return false;
+			}
+
+			const levelName = reason === 'TAKE_PROFIT' ? `TP${levelIndex + 1}` : `SL${levelIndex + 1}`;
+			logger.info(`Executing ${levelName} (${sellPercent}% at ${pnlPercent >= 0 ? '+' : ''}${pnlPercent}%) for position ${positionId}...`);
+
+			// Get ethers wallet
+			let ethersWallet;
+			try {
+				ethersWallet = wallet.getEthersWallet();
+			} catch (walletError: any) {
+				logger.error(`Failed to access wallet: ${walletError.message}`);
+				position.hasPendingSell = false;
+				await this.notifyError(order, position, `Wallet access failed: ${walletError.message}`);
+				return false;
+			}
+
+			// Get actual token balance
+			const ethers = require('ethers');
+			const tokenContract = new ethers.Contract(
+				position.token.address,
+				['function balanceOf(address) view returns (uint256)'],
+				ethersWallet
+			);
+
+			let actualBalance;
+			try {
+				actualBalance = await tokenContract.balanceOf(wallet.address);
+				const balanceFormatted = ethers.utils.formatUnits(actualBalance, position.token.decimals);
+				logger.info(`Current token balance: ${balanceFormatted} ${position.token.symbol}`);
+
+				if (actualBalance.isZero()) {
+					logger.error('Token balance is zero, cannot sell');
+					position.hasPendingSell = false;
+					await this.notifyError(order, position, 'Token balance is zero');
+					return false;
+				}
+			} catch (balanceError: any) {
+				logger.error(`Failed to get token balance: ${balanceError.message}`);
+				position.hasPendingSell = false;
+				await this.notifyError(order, position, `Failed to get token balance: ${balanceError.message}`);
+				return false;
+			}
+
+			// Calculate partial sell amount
+			const sellAmount = actualBalance.mul(sellPercent).div(100);
+			const sellAmountStr = ethers.utils.formatUnits(sellAmount, position.token.decimals);
+			logger.info(`Selling ${sellPercent}% = ${sellAmountStr} ${position.token.symbol}`);
+
+			// Create transaction for queue
+			const transaction = new B_Transaction({
+				type: TransactionType.SELL,
+				wallet,
+				token: position.token,
+				tokenAmount: sellAmountStr,
+				slippage: order.slippage,
+				gasPrice: order.gasFee.gasPrice,
+				gasLimit: order.gasFee.gasLimit,
+				orderId: order._id.toString(),
+				positionId: position.id,
+				userId: order.userId.toString(),
+				priority: reason === 'STOP_LOSS' ? 100 : 50,
 			});
-			await Promise.all(executePromises);
+
+			// Queue the transaction
+			const txId = transactionQueue.push(transaction);
+			logger.info(`🎯 Partial sell transaction queued: ${txId}`);
+
+			// Wait for transaction to complete
+			const sellResult = await this.waitForTransaction(transaction, 120000);
+
+			if (!sellResult.success) {
+				const errorMsg = sellResult.error || 'Unknown error';
+				logger.error(`❌ Partial sell failed: ${errorMsg}`);
+				position.hasPendingSell = false;
+				await this.notifyError(order, position, `${levelName} sell failed: ${errorMsg}`);
+				return false;
+			}
+
+			if (!sellResult.txHash) {
+				logger.error('❌ No transaction hash returned');
+				position.hasPendingSell = false;
+				await this.notifyError(order, position, 'No transaction hash returned');
+				return false;
+			}
+
+			// Verify transaction receipt
+			try {
+				const provider = getProvider();
+				const receipt = await provider.getTransactionReceipt(sellResult.txHash);
+
+				if (!receipt) {
+					logger.error('❌ Transaction receipt not found');
+					position.hasPendingSell = false;
+					await this.notifyError(order, position, 'Transaction receipt not found');
+					return false;
+				}
+
+				if (receipt.status !== 1) {
+					logger.error('❌ Transaction reverted (status = 0)');
+					position.hasPendingSell = false;
+					await this.notifyError(order, position, 'Transaction reverted');
+					return false;
+				}
+
+				logger.success(`✅ TX confirmed: Block #${receipt.blockNumber}`);
+			} catch (receiptError: any) {
+				logger.error(`Failed to verify transaction receipt: ${receiptError.message}`);
+			}
+
+			// Update database: mark level as triggered and update token amount
+			const newBalance = await tokenContract.balanceOf(wallet.address);
+			const newBalanceFormatted = parseFloat(ethers.utils.formatUnits(newBalance, position.token.decimals));
+
+			const updateField = reason === 'TAKE_PROFIT'
+				? 'triggeredTakeProfitLevels'
+				: 'triggeredStopLossLevels';
+
+			await Position.findByIdAndUpdate(positionId, {
+				$addToSet: { [updateField]: levelIndex },
+				tokenAmount: newBalanceFormatted,
+				lastPriceUpdate: new Date(),
+			});
+
+			// Update in-memory position
+			position.tokenAmount = newBalanceFormatted;
+			if (reason === 'TAKE_PROFIT') {
+				if (!position.triggeredTakeProfitLevels) position.triggeredTakeProfitLevels = [];
+				if (!position.triggeredTakeProfitLevels.includes(levelIndex)) {
+					position.triggeredTakeProfitLevels.push(levelIndex);
+				}
+			} else {
+				if (!position.triggeredStopLossLevels) position.triggeredStopLossLevels = [];
+				if (!position.triggeredStopLossLevels.includes(levelIndex)) {
+					position.triggeredStopLossLevels.push(levelIndex);
+				}
+			}
+
+			logger.success(`✅ ${levelName} executed: Sold ${sellPercent}%, Remaining: ${newBalanceFormatted} tokens`);
+
+			// Check if position should be closed (tokenAmount near zero)
+			if (newBalanceFormatted < 0.0001 || sellPercent >= 100) {
+				logger.info(`Token amount near zero (${newBalanceFormatted}), closing position...`);
+				await positionManager.closePosition(positionId, position.currentPrice, sellResult.txHash!);
+				logger.success(`✅ Position closed: ${positionId}`);
+			} else {
+				// Clear pending sell flag
+				position.hasPendingSell = false;
+			}
+
+			// Send notification
+			await this.notifyPartialSell(order, position, reason, levelName, sellPercent, pnlPercent, sellResult.txHash!);
+
+			return true;
+		} catch (error: any) {
+			logger.error(`Partial sell execution failed: ${error.message}`);
+			const position = positionManager.getPosition(positionId);
+			if (position) {
+				position.hasPendingSell = false;
+			}
+			return false;
 		}
 	}
 
@@ -669,6 +957,45 @@ export class PNLMonitorEngine {
 			});
 		} catch (error: any) {
 			logger.error(`Failed to send notification: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Send partial sell notification to user
+	 */
+	private async notifyPartialSell(
+		order: any,
+		position: any,
+		reason: 'TAKE_PROFIT' | 'STOP_LOSS',
+		levelName: string,
+		sellPercent: number,
+		pnlPercent: number,
+		txHash: string
+	): Promise<void> {
+		try {
+			const user = await User.findById(order.userId);
+			if (!user) return;
+
+			const emoji = reason === 'TAKE_PROFIT' ? '🎯' : '🛑';
+			const action = reason === 'TAKE_PROFIT' ? 'Take Profit' : 'Stop Loss';
+
+			const message =
+				`${emoji} <b>${action} Level Triggered!</b>\n\n` +
+				`<b>Level:</b> ${levelName} (${pnlPercent >= 0 ? '+' : ''}${pnlPercent}%)\n` +
+				`<b>Sold:</b> ${sellPercent}% of position\n` +
+				`<b>Remaining:</b> ${position.tokenAmount.toLocaleString()} tokens\n\n` +
+				`<b>Order:</b> ${order.name}\n` +
+				`<b>Token:</b> ${position.token.symbol || 'Unknown'}\n` +
+				`<code>${position.token.address}</code>\n\n` +
+				`<b>Current Price:</b> ${position.currentPrice.toFixed(10)} BNB\n` +
+				`<b>Current P&L:</b> ${position.getPnL() >= 0 ? '+' : ''}${position.getPnL().toFixed(6)} BNB (${position.getPnLPercent() >= 0 ? '+' : ''}${position.getPnLPercent().toFixed(2)}%)\n\n` +
+				`<b>TX Hash:</b>\n<code>${txHash}</code>`;
+
+			await bot.sendMessage(user.chatId, message, {
+				parse_mode: 'HTML',
+			});
+		} catch (error: any) {
+			logger.error(`Failed to send partial sell notification: ${error.message}`);
 		}
 	}
 

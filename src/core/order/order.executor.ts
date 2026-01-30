@@ -191,13 +191,17 @@ export async function executeBuyOrder(
 			status: PositionStatus.PENDING,
 			takeProfitTarget: order.takeProfitPercent,
 			stopLossTarget: order.stopLossPercent,
+
+			// NEW: Copy multiple TP/SL levels from order
+			takeProfitLevels: order.takeProfitLevels || [],
+			stopLossLevels: order.stopLossLevels || [],
+			triggeredTakeProfitLevels: [],
+			triggeredStopLossLevels: [],
+
 			isManual: false,
 		});
 
 		logger.success(`Position created in DB: ${positionDoc._id}`);
-
-		// Note: tokenAmountReceived is already formatted (not in wei)
-		// No need to normalize again - swapResult.amountOut is already human-readable
 
 		// Create B_Position instance and add to PositionManager
 		const bPosition = new B_Position({
@@ -205,7 +209,7 @@ export async function executeBuyOrder(
 			orderId: order._id.toString(),
 			userId: order.userId.toString(),
 			token: bToken,
-			tokenAmount: tokenAmountReceived,  // Already normalized from swapResult
+			tokenAmount: tokenAmountReceived,
 			bnbSpent: order.tradingAmount,
 			buyPrice: buyPriceInBnb,
 			currentPrice: buyPriceInBnb,
@@ -216,10 +220,16 @@ export async function executeBuyOrder(
 			stopLossPercent: order.stopLossPercent,
 			takeProfitEnabled: order.takeProfitEnabled,
 			stopLossEnabled: order.stopLossEnabled,
+
+			// NEW: Copy multiple TP/SL levels
+			takeProfitLevels: order.takeProfitLevels || [],
+			stopLossLevels: order.stopLossLevels || [],
+			triggeredTakeProfitLevels: [],
+			triggeredStopLossLevels: [],
 		});
 
 		// Add to PositionManager (in-memory tracking)
-		positionManager.addPosition(bPosition);
+		await positionManager.addPosition(bPosition);
 		logger.success(`Position added to PositionManager: ${bPosition.id}`);
 
 		// Log successful transaction

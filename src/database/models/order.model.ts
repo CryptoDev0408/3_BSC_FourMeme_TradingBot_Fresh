@@ -1,6 +1,22 @@
 import mongoose, { Document, Schema, Model } from 'mongoose';
 
 /**
+ * Take Profit Level Interface
+ */
+export interface ITakeProfitLevel {
+	pnlPercent: number;
+	sellPercent: number;
+}
+
+/**
+ * Stop Loss Level Interface
+ */
+export interface IStopLossLevel {
+	pnlPercent: number;
+	sellPercent: number;
+}
+
+/**
  * Order Interface
  */
 export interface IOrder extends Document {
@@ -10,10 +26,17 @@ export interface IOrder extends Document {
 	isActive: boolean;
 	autoBuy: boolean;
 	tradingAmount: number;
+
+	// Legacy TP/SL (kept for backwards compatibility)
 	takeProfitPercent: number;
 	takeProfitEnabled: boolean;
 	stopLossPercent: number;
 	stopLossEnabled: boolean;
+
+	// NEW: Multiple TP/SL levels
+	takeProfitLevels: ITakeProfitLevel[];
+	stopLossLevels: IStopLossLevel[];
+
 	timeLimitEnabled: boolean;
 	timeLimitSeconds: number;
 	gasFee: {
@@ -83,6 +106,26 @@ const OrderSchema = new Schema<IOrder>(
 			default: true,
 		},
 		timeLimitEnabled: {
+			// NEW: Multiple TP/SL levels
+			takeProfitLevels: {
+				type: [
+					{
+						pnlPercent: { type: Number, required: true, min: 0 },
+						sellPercent: { type: Number, required: true, min: 1, max: 100 },
+					},
+				],
+				default: [{ pnlPercent: 50, sellPercent: 100 }],
+			},
+			stopLossLevels: {
+				type: [
+					{
+						pnlPercent: { type: Number, required: true, min: 0 },
+						sellPercent: { type: Number, required: true, min: 1, max: 100 },
+					},
+				],
+				default: [{ pnlPercent: 30, sellPercent: 100 }],
+			},
+
 			type: Boolean,
 			default: false,
 		},

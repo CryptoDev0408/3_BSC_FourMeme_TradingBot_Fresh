@@ -65,6 +65,8 @@ export async function createOrder(
 		takeProfitEnabled?: boolean;
 		stopLossPercent?: number;
 		stopLossEnabled?: boolean;
+		takeProfitLevels?: Array<{ pnlPercent: number; sellPercent: number }>;
+		stopLossLevels?: Array<{ pnlPercent: number; sellPercent: number }>;
 		orderName?: string;
 	}
 ): Promise<OrderResult> {
@@ -79,6 +81,26 @@ export async function createOrder(
 		const orderCount = await getOrderCount(userId);
 		const name = customConfig?.orderName || `Order #${orderCount + 1}`;
 
+		// Prepare TP/SL levels - use arrays if provided, otherwise use legacy single values
+		let takeProfitLevels = customConfig?.takeProfitLevels;
+		let stopLossLevels = customConfig?.stopLossLevels;
+
+		// If no arrays provided but legacy values provided, convert them
+		if (!takeProfitLevels && customConfig?.takeProfitPercent !== undefined) {
+			takeProfitLevels = [{ pnlPercent: customConfig.takeProfitPercent, sellPercent: 100 }];
+		}
+		if (!stopLossLevels && customConfig?.stopLossPercent !== undefined) {
+			stopLossLevels = [{ pnlPercent: customConfig.stopLossPercent, sellPercent: 100 }];
+		}
+
+		// Default levels if nothing provided
+		if (!takeProfitLevels) {
+			takeProfitLevels = [{ pnlPercent: 50, sellPercent: 100 }];
+		}
+		if (!stopLossLevels) {
+			stopLossLevels = [{ pnlPercent: 30, sellPercent: 100 }];
+		}
+
 		// Create order with custom or default settings
 		const order = await Order.create({
 			userId,
@@ -86,10 +108,8 @@ export async function createOrder(
 			name,
 			isActive: false,
 			tradingAmount: customConfig?.tradingAmount ?? 0.01,
-			takeProfitPercent: customConfig?.takeProfitPercent ?? 50,
-			takeProfitEnabled: customConfig?.takeProfitEnabled ?? true,
-			stopLossPercent: customConfig?.stopLossPercent ?? 25,
-			stopLossEnabled: customConfig?.stopLossEnabled ?? true,
+			takeProfitLevels,
+			stopLossLevels,
 			slippage: customConfig?.slippage ?? 10,
 			gasFee: {
 				gasPrice: '5',

@@ -2,6 +2,22 @@ import mongoose, { Document, Schema, Model } from 'mongoose';
 import { PositionStatus } from '../../config/constants';
 
 /**
+ * Take Profit Level Interface
+ */
+export interface ITakeProfitLevel {
+	pnlPercent: number;
+	sellPercent: number;
+}
+
+/**
+ * Stop Loss Level Interface
+ */
+export interface IStopLossLevel {
+	pnlPercent: number;
+	sellPercent: number;
+}
+
+/**
  * Position Interface
  */
 export interface IPosition extends Document {
@@ -35,8 +51,17 @@ export interface IPosition extends Document {
 
 	status: PositionStatus;
 
+	// Legacy TP/SL targets
 	takeProfitTarget: number;
 	stopLossTarget: number;
+
+	// NEW: Multiple TP/SL levels (copied from order)
+	takeProfitLevels: ITakeProfitLevel[];
+	stopLossLevels: IStopLossLevel[];
+
+	// NEW: Track which levels have been triggered
+	triggeredTakeProfitLevels: number[]; // indices of triggered TP levels
+	triggeredStopLossLevels: number[]; // indices of triggered SL levels
 
 	isManual: boolean;
 
@@ -162,6 +187,35 @@ const PositionSchema = new Schema<IPosition>(
 		stopLossTarget: {
 			type: Number,
 			default: 0,
+		// NEW: Multiple TP/SL levels (copied from order)
+		takeProfitLevels: {
+			type: [
+				{
+					pnlPercent: { type: Number, required: true, min: 0 },
+					sellPercent: { type: Number, required: true, min: 1, max: 100 },
+				},
+			],
+			default: [],
+		},
+		stopLossLevels: {
+			type: [
+				{
+					pnlPercent: { type: Number, required: true, min: 0 },
+					sellPercent: { type: Number, required: true, min: 1, max: 100 },
+				},
+			],
+			default: [],
+		},
+		// NEW: Track triggered levels
+		triggeredTakeProfitLevels: {
+			type: [Number],
+			default: [],
+		},
+		triggeredStopLossLevels: {
+			type: [Number],
+			default: [],
+		},
+
 		},
 		isManual: {
 			type: Boolean,

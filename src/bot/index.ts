@@ -32,12 +32,6 @@ import {
 	handleOrderSetConfigWallet,
 	handleOrderConfigSlippage,
 	handleOrderSetConfigSlippage,
-	handleOrderConfigTP,
-	handleOrderSetConfigTP,
-	handleOrderConfigTPCustom,
-	handleOrderConfigSL,
-	handleOrderSetConfigSL,
-	handleOrderConfigSLCustom,
 	handleOrderConfigCancel,
 	handleOrderConfigCreate,
 	handleOrderToggle,
@@ -71,6 +65,12 @@ import {
 	handleManualBuy,
 	handleOrderTextMessage,
 	clearOrderState,
+	handleAddTPLevel,
+	handleAddSLLevel,
+	handleEditTPLevel,
+	handleEditSLLevel,
+	handleDeleteTPLevel,
+	handleDeleteSLLevel,
 	setBotInstance as setOrderBotInstance,
 } from './handlers/order.handler';
 import {
@@ -372,38 +372,24 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('order_config_slippage_')) {
 				const slippage = parseInt(data.replace('order_config_slippage_', ''));
 				await handleOrderSetConfigSlippage(chatId, slippage, query.message?.message_id);
-			} else if (data === 'order_config_tp') {
-				await handleOrderConfigTP(chatId, query.message?.message_id);
-			} else if (data === 'order_config_tp_toggle') {
-				await handleOrderSetConfigTP(chatId, 'toggle', query.message?.message_id);
-			} else if (data === 'order_config_tp_disabled') {
-				await bot.answerCallbackQuery(query.id, {
-					text: '❌ Take Profit is disabled. Enable it first to change percentage.',
-					show_alert: true,
-				});
-			} else if (data === 'order_config_tp_custom') {
-				await handleOrderConfigTPCustom(chatId, query.message?.message_id);
-			} else if (data.startsWith('order_config_tp_')) {
-				const percent = parseInt(data.replace('order_config_tp_', ''));
-				await handleOrderSetConfigTP(chatId, percent, query.message?.message_id);
-			} else if (data === 'order_config_sl') {
-				await handleOrderConfigSL(chatId, query.message?.message_id);
-			} else if (data === 'order_config_sl_toggle') {
-				await handleOrderSetConfigSL(chatId, 'toggle', query.message?.message_id);
-			} else if (data === 'order_config_sl_disabled') {
-				await bot.answerCallbackQuery(query.id, {
-					text: '❌ Stop Loss is disabled. Enable it first to change percentage.',
-					show_alert: true,
-				});
-			} else if (data === 'order_config_sl_custom') {
-				await handleOrderConfigSLCustom(chatId, query.message?.message_id);
-			} else if (data.startsWith('order_config_sl_')) {
-				const percent = parseInt(data.replace('order_config_sl_', ''));
-				await handleOrderSetConfigSL(chatId, percent, query.message?.message_id);
 			} else if (data === 'order_config_back') {
 				await handleOrderCreate(chatId, query.message?.message_id);
 			} else if (data === 'order_config_cancel') {
 				await handleOrderConfigCancel(chatId, query.message?.message_id);
+			} else if (data === 'order_config_addtp') {
+				const { handleOrderConfigAddTP } = await import('./handlers/order.handler');
+				await handleOrderConfigAddTP(chatId, query.message?.message_id);
+			} else if (data === 'order_config_addsl') {
+				const { handleOrderConfigAddSL } = await import('./handlers/order.handler');
+				await handleOrderConfigAddSL(chatId, query.message?.message_id);
+			} else if (data.startsWith('order_config_deletetp_')) {
+				const index = parseInt(data.replace('order_config_deletetp_', ''));
+				const { handleOrderConfigDeleteTP } = await import('./handlers/order.handler');
+				await handleOrderConfigDeleteTP(chatId, index, query.message?.message_id);
+			} else if (data.startsWith('order_config_deletesl_')) {
+				const index = parseInt(data.replace('order_config_deletesl_', ''));
+				const { handleOrderConfigDeleteSL } = await import('./handlers/order.handler');
+				await handleOrderConfigDeleteSL(chatId, index, query.message?.message_id);
 			} else if (data === 'order_config_create') {
 				await handleOrderConfigCreate(chatId, query.message?.message_id);
 			} else if (data.startsWith('order_view_')) {
@@ -506,6 +492,35 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('order_timelimit_input_')) {
 				const orderId = data.replace('order_timelimit_input_', '');
 				await handleTimeLimitInput(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_tpsl_')) {
+				const orderId = data.replace('order_tpsl_', '');
+				await showTPSLSettings(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_addtp_')) {
+				const orderId = data.replace('order_addtp_', '');
+				await handleAddTPLevel(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_addsl_')) {
+				const orderId = data.replace('order_addsl_', '');
+				await handleAddSLLevel(chatId, orderId, query.message?.message_id);
+			} else if (data.startsWith('order_edittp_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const levelIndex = parseInt(parts[3]);
+				await handleEditTPLevel(chatId, orderId, levelIndex, query.message?.message_id);
+			} else if (data.startsWith('order_editsl_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const levelIndex = parseInt(parts[3]);
+				await handleEditSLLevel(chatId, orderId, levelIndex, query.message?.message_id);
+			} else if (data.startsWith('order_deletetp_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const levelIndex = parseInt(parts[3]);
+				await handleDeleteTPLevel(chatId, orderId, levelIndex, query.message?.message_id);
+			} else if (data.startsWith('order_deletesl_')) {
+				const parts = data.split('_');
+				const orderId = parts[2];
+				const levelIndex = parseInt(parts[3]);
+				await handleDeleteSLLevel(chatId, orderId, levelIndex, query.message?.message_id);
 			} else if (data.startsWith('order_settp_')) {
 				const parts = data.split('_');
 				const orderId = parts[2];

@@ -7,6 +7,22 @@ import { PositionStatus } from '../../config/constants';
 export { PositionStatus };
 
 /**
+ * Take Profit Level Interface
+ */
+export interface ITakeProfitLevel {
+	pnlPercent: number;
+	sellPercent: number;
+}
+
+/**
+ * Stop Loss Level Interface
+ */
+export interface IStopLossLevel {
+	pnlPercent: number;
+	sellPercent: number;
+}
+
+/**
  * B_Position - Position Tracking Class
  * Represents a bought token position from an order
  */
@@ -24,10 +40,19 @@ export class B_Position {
 	public sellTxHash?: string;
 	public buyTimestamp: Date;
 	public sellTimestamp?: Date;
+
+	// Legacy TP/SL
 	public takeProfitPercent: number;
 	public stopLossPercent: number;
 	public takeProfitEnabled: boolean;
 	public stopLossEnabled: boolean;
+
+	// NEW: Multiple TP/SL levels
+	public takeProfitLevels: ITakeProfitLevel[];
+	public stopLossLevels: IStopLossLevel[];
+	public triggeredTakeProfitLevels: number[];
+	public triggeredStopLossLevels: number[];
+
 	public hasPendingSell: boolean = false; // Prevent duplicate sell transactions
 
 	constructor(data: {
@@ -48,6 +73,11 @@ export class B_Position {
 		stopLossPercent: number;
 		takeProfitEnabled: boolean;
 		stopLossEnabled: boolean;
+		// NEW: Multiple TP/SL levels
+		takeProfitLevels?: ITakeProfitLevel[];
+		stopLossLevels?: IStopLossLevel[];
+		triggeredTakeProfitLevels?: number[];
+		triggeredStopLossLevels?: number[];
 	}) {
 		this.id = data.id || `${data.orderId}_${data.token.address}_${Date.now()}`;
 		this.orderId = data.orderId;
@@ -67,6 +97,12 @@ export class B_Position {
 		this.stopLossPercent = typeof data.stopLossPercent === 'string' ? parseFloat(data.stopLossPercent) : data.stopLossPercent;
 		this.takeProfitEnabled = data.takeProfitEnabled;
 		this.stopLossEnabled = data.stopLossEnabled;
+
+		// NEW: Initialize multiple TP/SL levels
+		this.takeProfitLevels = data.takeProfitLevels || [];
+		this.stopLossLevels = data.stopLossLevels || [];
+		this.triggeredTakeProfitLevels = data.triggeredTakeProfitLevels || [];
+		this.triggeredStopLossLevels = data.triggeredStopLossLevels || [];
 	}
 
 	/**

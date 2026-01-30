@@ -233,3 +233,59 @@ export function getManualBuyKeyboard(orderId: string): TelegramBot.InlineKeyboar
 		],
 	};
 }
+
+/**
+ * Get TP/SL levels editor keyboard (Multiple Levels System)
+ */
+export function getTPSLLevelsKeyboard(
+	orderId: string,
+	takeProfitLevels: Array<{ pnlPercent: number; sellPercent: number }>,
+	stopLossLevels: Array<{ pnlPercent: number; sellPercent: number }>
+): TelegramBot.InlineKeyboardMarkup {
+	const buttons: TelegramBot.InlineKeyboardButton[][] = [];
+
+	// Take Profit Levels Section
+	if (takeProfitLevels.length > 0) {
+		for (let i = 0; i < takeProfitLevels.length; i++) {
+			const level = takeProfitLevels[i];
+			buttons.push([
+				{
+					text: `🎯 TP${i + 1}: +${level.pnlPercent}% → Sell ${level.sellPercent}%`,
+					callback_data: `order_edittp_${orderId}_${i}`
+				},
+				{
+					text: '🗑',
+					callback_data: `order_deletetp_${orderId}_${i}`
+				},
+			]);
+		}
+	}
+
+	// Add TP Level Button
+	buttons.push([{ text: '➕ Add Take Profit Level', callback_data: `order_addtp_${orderId}` }]);
+
+	// Stop Loss Levels Section
+	if (stopLossLevels.length > 0) {
+		for (let i = 0; i < stopLossLevels.length; i++) {
+			const level = stopLossLevels[i];
+			buttons.push([
+				{
+					text: `🛑 SL${i + 1}: -${level.pnlPercent}% → Sell ${level.sellPercent}%`,
+					callback_data: `order_editsl_${orderId}_${i}`
+				},
+				{
+					text: '🗑',
+					callback_data: `order_deletesl_${orderId}_${i}`
+				},
+			]);
+		}
+	}
+
+	// Add SL Level Button
+	buttons.push([{ text: '➕ Add Stop Loss Level', callback_data: `order_addsl_${orderId}` }]);
+
+	// Back Button
+	buttons.push([{ text: '🛡️ Back', callback_data: `order_view_${orderId}` }]);
+
+	return { inline_keyboard: buttons };
+}

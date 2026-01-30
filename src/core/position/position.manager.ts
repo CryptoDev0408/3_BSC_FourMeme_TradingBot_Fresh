@@ -67,6 +67,12 @@ export class PositionManager {
 						takeProfitPercent: pos.takeProfitTarget,
 						stopLossPercent: pos.stopLossTarget,
 						takeProfitEnabled: takeProfitEnabled,  // Read from order
+					// NEW: Load multiple TP/SL levels from position
+					takeProfitLevels: pos.takeProfitLevels || [],
+					stopLossLevels: pos.stopLossLevels || [],
+					triggeredTakeProfitLevels: pos.triggeredTakeProfitLevels || [],
+					triggeredStopLossLevels: pos.triggeredStopLossLevels || [],
+
 						stopLossEnabled: stopLossEnabled,      // Read from order
 					});
 

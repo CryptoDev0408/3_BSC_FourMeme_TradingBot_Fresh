@@ -54,8 +54,23 @@ export async function showPositionsList(chatId: string, messageId?: number): Pro
 				for (const position of displayedActive) {
 					const pnlEmoji = position.pnlPercent >= 0 ? '📈' : '📉';
 					const pnlSign = position.pnlPercent >= 0 ? '+' : '';
+
+					// Check for triggered levels
+					const triggeredTP = position.triggeredTakeProfitLevels?.length || 0;
+					const triggeredSL = position.triggeredStopLossLevels?.length || 0;
+					const totalTP = position.takeProfitLevels?.length || 0;
+					const totalSL = position.stopLossLevels?.length || 0;
+
+					let levelsInfo = '';
+					if (triggeredTP > 0) {
+						levelsInfo += ` | ✅TP${triggeredTP}/${totalTP}`;
+					}
+					if (triggeredSL > 0) {
+						levelsInfo += ` | ✅SL${triggeredSL}/${totalSL}`;
+					}
+
 					// Compact format
-					text += `🟢 <b>${position.tokenSymbol}</b> | ${formatBnb(position.buyAmount)} BNB\n`;
+					text += `🟢 <b>${position.tokenSymbol}</b> | ${formatBnb(position.buyAmount)} BNB${levelsInfo}\n`;
 					text += `${pnlEmoji} ${pnlSign}${formatPercent(position.pnlPercent)}% (${pnlSign}${formatBnb(position.pnlBnb)})\n\n`;
 				}
 				if (activePositions.length > 10) {
@@ -150,9 +165,38 @@ export async function showPositionDetail(chatId: string, positionId: string, mes
 		text += `💵 PNL BNB: ${pnlSign}${formatBnb(position.pnlBnb)} BNB\n`;
 		text += `💲 PNL USD: $${pnlSign}${position.pnlUsd.toFixed(2)}\n\n`;
 
-		text += `🎯 <b>Targets</b>\n`;
-		text += `✅ Take Profit: ${formatPercent(position.takeProfitTarget)}%\n`;
-		text += `🛑 Stop Loss: ${formatPercent(position.stopLossTarget)}%\n\n`;
+		// Display Multiple TP/SL Levels with triggered status
+		if (position.takeProfitLevels && position.takeProfitLevels.length > 0) {
+			text += `🎯 <b>Take Profit Levels</b>\n`;
+			for (let i = 0; i < position.takeProfitLevels.length; i++) {
+				const level = position.takeProfitLevels[i];
+				const isTriggered = position.triggeredTakeProfitLevels?.includes(i);
+				const statusIcon = isTriggered ? '✅' : '⏳';
+				text += `${statusIcon} TP${i + 1}: +${level.pnlPercent}% → Sell ${level.sellPercent}%\n`;
+			}
+			text += '\n';
+		} else if (position.takeProfitTarget) {
+			// Legacy single TP display
+			text += `🎯 <b>Targets</b>\n`;
+			text += `✅ Take Profit: ${formatPercent(position.takeProfitTarget)}%\n`;
+		}
+
+		if (position.stopLossLevels && position.stopLossLevels.length > 0) {
+			text += `🛑 <b>Stop Loss Levels</b>\n`;
+			for (let i = 0; i < position.stopLossLevels.length; i++) {
+				const level = position.stopLossLevels[i];
+				const isTriggered = position.triggeredStopLossLevels?.includes(i);
+				const statusIcon = isTriggered ? '✅' : '⏳';
+				text += `${statusIcon} SL${i + 1}: -${level.pnlPercent}% → Sell ${level.sellPercent}%\n`;
+			}
+			text += '\n';
+		} else if (position.stopLossTarget) {
+			// Legacy single SL display (only if not already shown above)
+			if (!position.takeProfitLevels || position.takeProfitLevels.length === 0) {
+				text += `🎯 <b>Targets</b>\n`;
+			}
+			text += `🛑 Stop Loss: ${formatPercent(position.stopLossTarget)}%\n\n`;
+		}
 
 		if (position.status !== PositionStatus.ACTIVE) {
 			text += `🔴 <b>Sell Information</b>\n`;
