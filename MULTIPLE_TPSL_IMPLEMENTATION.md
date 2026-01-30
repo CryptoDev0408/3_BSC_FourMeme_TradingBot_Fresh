@@ -228,7 +228,7 @@ const position = new Position({
 
    // Add button to add new TP level
    keyboard.inline_keyboard.push([
-     { text: "➕ Add TP", callback_data: `order_addtp_${orderId}` },
+     { text: "⭐ Add TP", callback_data: `order_addtp_${orderId}` },
    ]);
 
    // Same for SL levels...

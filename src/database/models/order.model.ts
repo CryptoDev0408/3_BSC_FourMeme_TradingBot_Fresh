@@ -85,25 +85,22 @@ const OrderSchema = new Schema<IOrder>(
 			min: 0.001,
 			default: 0.01,
 		},
+		// Legacy fields (kept for backward compatibility, NO defaults - don't save unless explicitly set)
 		takeProfitPercent: {
 			type: Number,
 			min: 0,
 			max: 10000,
-			default: 50,
 		},
 		takeProfitEnabled: {
 			type: Boolean,
-			default: true,
 		},
 		stopLossPercent: {
 			type: Number,
 			min: 0,
 			max: 100,
-			default: 25,
 		},
 		stopLossEnabled: {
 			type: Boolean,
-			default: true,
 		},
 		// NEW: Multiple TP/SL levels
 		takeProfitLevels: {

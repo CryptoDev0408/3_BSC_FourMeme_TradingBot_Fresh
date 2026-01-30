@@ -515,12 +515,12 @@ function setupCallbackHandlers(): void {
 				const parts = data.split('_');
 				const orderId = parts[2];
 				const levelIndex = parseInt(parts[3]);
-				await handleDeleteTPLevel(chatId, orderId, levelIndex, query.message?.message_id);
+				await handleDeleteTPLevel(chatId, orderId, levelIndex, query.message?.message_id, query.id);
 			} else if (data.startsWith('order_deletesl_')) {
 				const parts = data.split('_');
 				const orderId = parts[2];
 				const levelIndex = parseInt(parts[3]);
-				await handleDeleteSLLevel(chatId, orderId, levelIndex, query.message?.message_id);
+				await handleDeleteSLLevel(chatId, orderId, levelIndex, query.message?.message_id, query.id);
 			} else if (data.startsWith('order_settp_')) {
 				const parts = data.split('_');
 				const orderId = parts[2];

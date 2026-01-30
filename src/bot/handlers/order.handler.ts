@@ -260,7 +260,7 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 
 			// Add TP button
 			keyboard.inline_keyboard.push([
-				{ text: '➕ Add Take Profit Level', callback_data: `order_addtp_${orderId}` },
+				{ text: '⭐ Add Take Profit Level', callback_data: `order_addtp_${orderId}` },
 			]);
 
 			// Add SL levels rows
@@ -281,7 +281,7 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 
 			// Add SL button
 			keyboard.inline_keyboard.push([
-				{ text: '➕ Add Stop Loss Level', callback_data: `order_addsl_${orderId}` },
+				{ text: '⭐ Add Stop Loss Level', callback_data: `order_addsl_${orderId}` },
 			]);
 
 			// Time Limit, Gas settings
@@ -600,7 +600,7 @@ ${tpText}${slText}
 
 		// Add TP button
 		keyboard.inline_keyboard.push([
-			{ text: '➕ Add Take Profit Level', callback_data: 'order_config_addtp' },
+			{ text: '⭐ Add Take Profit Level', callback_data: 'order_config_addtp' },
 		]);
 
 		// Add rows for each SL level
@@ -619,13 +619,13 @@ ${tpText}${slText}
 
 		// Add SL button
 		keyboard.inline_keyboard.push([
-			{ text: '➕ Add Stop Loss Level', callback_data: 'order_config_addsl' },
+			{ text: '⭐ Add Stop Loss Level', callback_data: 'order_config_addsl' },
 		]);
 
 		// Create and Back buttons
 		keyboard.inline_keyboard.push(
 			[{ text: '✅ Create Order', callback_data: 'order_config_create' }],
-			[{ text: '🛡️ Back to Orders', callback_data: 'order_config_cancel' }]
+			[{ text: '🛡️ Back to Order', callback_data: 'order_config_cancel' }]
 		);
 
 		if (messageId) {
@@ -2341,6 +2341,7 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 		// Handle Add TP Level - Step 1: PNL Percentage
 		if (state.action === 'order_addtp_input') {
 			const pnlPercent = parseFloat(text);
+			console.log("=================== Input pnlPercent:", pnlPercent);
 			if (isNaN(pnlPercent) || pnlPercent < 0.1) {
 				await getBot().sendMessage(chatId, '❌ Invalid percentage. Minimum is 0.1%.');
 				return true;
@@ -2355,8 +2356,7 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 				chatId,
 				`✅ PNL set to +${pnlPercent}%\n\n` +
 				`Now enter the sell percentage (how much to sell when this level triggers):\n\n` +
-				`<i>Example: 50 (means sell 50% of remaining tokens)</i>\n\n` +
-				`<b>Note:</b> The last TP level will automatically be set to 100%.`,
+				`<i>Example: 50 (means sell 50% of remaining tokens)</i>`,
 				{ parse_mode: 'HTML' }
 			);
 			return true;
@@ -2365,6 +2365,9 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 		// Handle Add TP Level - Step 2: Sell Percentage
 		if (state.action === 'order_addtp_sell') {
 			const sellPercent = parseFloat(text);
+
+			console.log("=================== Input sellPercent:", sellPercent);
+
 			if (isNaN(sellPercent) || sellPercent < 1 || sellPercent > 100) {
 				await getBot().sendMessage(chatId, '❌ Invalid percentage. Must be between 1 and 100.');
 				return true;
@@ -2389,16 +2392,11 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 				order.takeProfitLevels = [];
 			}
 
-			// Add new level
+			// Add new level with user's specified sell percent
 			order.takeProfitLevels.push({
 				pnlPercent: state.data.pnlPercent,
 				sellPercent: sellPercent,
 			});
-
-			// Ensure last level is 100%
-			if (order.takeProfitLevels.length > 0) {
-				order.takeProfitLevels[order.takeProfitLevels.length - 1].sellPercent = 100;
-			}
 
 			await order.save();
 
@@ -2426,8 +2424,7 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 				chatId,
 				`✅ PNL set to -${pnlPercent}%\n\n` +
 				`Now enter the sell percentage (how much to sell when this level triggers):\n\n` +
-				`<i>Example: 50 (means sell 50% of remaining tokens)</i>\n\n` +
-				`<b>Note:</b> The last SL level will automatically be set to 100%.`,
+				`<i>Example: 50 (means sell 50% of remaining tokens)</i>`,
 				{ parse_mode: 'HTML' }
 			);
 			return true;
@@ -2460,16 +2457,11 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 				order.stopLossLevels = [];
 			}
 
-			// Add new level
+			// Add new level with user's specified sell percent
 			order.stopLossLevels.push({
 				pnlPercent: state.data.pnlPercent,
 				sellPercent: sellPercent,
 			});
-
-			// Ensure last level is 100%
-			if (order.stopLossLevels.length > 0) {
-				order.stopLossLevels[order.stopLossLevels.length - 1].sellPercent = 100;
-			}
 
 			await order.save();
 
@@ -2527,11 +2519,6 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 			order.takeProfitLevels[state.data.levelIndex].pnlPercent = state.data.pnlPercent;
 			order.takeProfitLevels[state.data.levelIndex].sellPercent = sellPercent;
 
-			// Ensure last level is 100%
-			if (order.takeProfitLevels.length > 0) {
-				order.takeProfitLevels[order.takeProfitLevels.length - 1].sellPercent = 100;
-			}
-
 			await order.save();
 
 			await getBot().sendMessage(chatId, '✅ Take Profit level updated successfully!');
@@ -2587,11 +2574,6 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 			// Update level
 			order.stopLossLevels[state.data.levelIndex].pnlPercent = state.data.pnlPercent;
 			order.stopLossLevels[state.data.levelIndex].sellPercent = sellPercent;
-
-			// Ensure last level is 100%
-			if (order.stopLossLevels.length > 0) {
-				order.stopLossLevels[order.stopLossLevels.length - 1].sellPercent = 100;
-			}
 
 			await order.save();
 
@@ -3099,7 +3081,7 @@ export async function handleCustomSLInput(chatId: string, orderId: string, messa
  */
 export async function handleAddTPLevel(chatId: string, orderId: string, messageId?: number): Promise<void> {
 	try {
-		const text = '➕ <b>Add Take Profit Level</b>\n\n📊 Enter PNL percentage:\n\n<i>Example: 50 (means +50% profit)</i>';
+		const text = '⭐ <b>Add Take Profit Level</b>\n\n📊 Enter PNL percentage:\n\n<i>Example: 50 (means +50% profit)</i>';
 
 		userStates.set(chatId, {
 			action: 'order_addtp_input',
@@ -3134,7 +3116,7 @@ export async function handleAddTPLevel(chatId: string, orderId: string, messageI
  */
 export async function handleAddSLLevel(chatId: string, orderId: string, messageId?: number): Promise<void> {
 	try {
-		const text = '➕ <b>Add Stop Loss Level</b>\n\n📊 Enter loss percentage:\n\n<i>Example: 30 (means -30% loss)</i>';
+		const text = '⭐ <b>Add Stop Loss Level</b>\n\n📊 Enter loss percentage:\n\n<i>Example: 30 (means -30% loss)</i>';
 
 		userStates.set(chatId, {
 			action: 'order_addsl_input',
@@ -3251,26 +3233,28 @@ export async function handleEditSLLevel(chatId: string, orderId: string, levelIn
 /**
  * Handle Delete TP Level
  */
-export async function handleDeleteTPLevel(chatId: string, orderId: string, levelIndex: number, messageId?: number): Promise<void> {
+export async function handleDeleteTPLevel(chatId: string, orderId: string, levelIndex: number, messageId?: number, queryId?: string): Promise<void> {
 	try {
 		const user = await User.findOne({ chatId });
 		if (!user) return;
 
 		const order = await getOrderById(orderId, user._id.toString());
-		if (!order || !order.takeProfitLevels || !order.takeProfitLevels[levelIndex]) return;
+		if (!order || !order.takeProfitLevels || !order.takeProfitLevels[levelIndex]) {
+			if (queryId) {
+				await getBot().answerCallbackQuery(queryId, { text: '❌ TP level not found', show_alert: true });
+			}
+			return;
+		}
 
 		// Remove level
 		order.takeProfitLevels = order.takeProfitLevels.filter((_, idx) => idx !== levelIndex);
 
-		// Ensure last level is 100% if any levels remain
-		if (order.takeProfitLevels.length > 0) {
-			order.takeProfitLevels[order.takeProfitLevels.length - 1].sellPercent = 100;
-		}
-
 		await order.save();
 
-		await getBot().answerCallbackQuery(chatId, { text: '✅ TP level deleted!', show_alert: false });
-		await showTPSLSettings(chatId, orderId, messageId);
+		if (queryId) {
+			await getBot().answerCallbackQuery(queryId, { text: '✅ TP level deleted!', show_alert: false });
+		}
+		await showOrderDetail(chatId, orderId, messageId);
 	} catch (error: any) {
 		logger.error('Failed to delete TP level:', error.message);
 	}
@@ -3279,26 +3263,28 @@ export async function handleDeleteTPLevel(chatId: string, orderId: string, level
 /**
  * Handle Delete SL Level
  */
-export async function handleDeleteSLLevel(chatId: string, orderId: string, levelIndex: number, messageId?: number): Promise<void> {
+export async function handleDeleteSLLevel(chatId: string, orderId: string, levelIndex: number, messageId?: number, queryId?: string): Promise<void> {
 	try {
 		const user = await User.findOne({ chatId });
 		if (!user) return;
 
 		const order = await getOrderById(orderId, user._id.toString());
-		if (!order || !order.stopLossLevels || !order.stopLossLevels[levelIndex]) return;
+		if (!order || !order.stopLossLevels || !order.stopLossLevels[levelIndex]) {
+			if (queryId) {
+				await getBot().answerCallbackQuery(queryId, { text: '❌ SL level not found', show_alert: true });
+			}
+			return;
+		}
 
 		// Remove level
 		order.stopLossLevels = order.stopLossLevels.filter((_, idx) => idx !== levelIndex);
 
-		// Ensure last level is 100% if any levels remain
-		if (order.stopLossLevels.length > 0) {
-			order.stopLossLevels[order.stopLossLevels.length - 1].sellPercent = 100;
-		}
-
 		await order.save();
 
-		await getBot().answerCallbackQuery(chatId, { text: '✅ SL level deleted!', show_alert: false });
-		await showTPSLSettings(chatId, orderId, messageId);
+		if (queryId) {
+			await getBot().answerCallbackQuery(queryId, { text: '✅ SL level deleted!', show_alert: false });
+		}
+		await showOrderDetail(chatId, orderId, messageId);
 	} catch (error: any) {
 		logger.error('Failed to delete SL level:', error.message);
 	}

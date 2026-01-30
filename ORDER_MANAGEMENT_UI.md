@@ -39,7 +39,7 @@ You have 3 order(s):
 
 - `[🟢 Order #1 - 0.05 BNB] [🔴 Order #2 - 0.1 BNB]`
 - `[🟢 Order #3 - 0.01 BNB]`
-- `[➕ Create New Order]`
+- `[⭐ Create New Order]`
 - `[🏠 Main Menu]`
 
 **Empty State**:
@@ -351,7 +351,7 @@ Then shows orders list.
 
 1. **User Action**: Clicks "📊 Orders" from main menu
 2. **Bot**: Shows orders list
-3. **User Action**: Clicks "➕ Create New Order"
+3. **User Action**: Clicks "⭐ Create New Order"
 4. **Bot**: Creates order with default settings using active wallet
 5. **Bot**: Shows success message and order detail screen
 6. **User Action**: Configures order parameters (amount, TP/SL, gas, slippage)
@@ -423,7 +423,7 @@ Then shows orders list.
 
 1. Create a wallet first (💼 Wallets)
 2. Deposit BNB to wallet
-3. Create an order (📊 Orders → ➕ Create New Order)
+3. Create an order (📊 Orders → ⭐ Create New Order)
 4. Configure settings (amount, TP/SL)
 5. Activate order
 6. Use Manual Buy or wait for scanner alerts

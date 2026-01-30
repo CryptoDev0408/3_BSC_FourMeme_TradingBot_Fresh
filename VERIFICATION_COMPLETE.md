@@ -262,7 +262,7 @@ You can now test these workflows in the real bot UI:
 
 1. ✅ Create new order
 2. ✅ Go to TP/SL settings
-3. ✅ Click "➕ Add TP"
+3. ✅ Click "⭐ Add TP"
 4. ✅ Enter PNL: `20`
 5. ✅ Enter sell%: `33`
 6. ✅ Verify TP1 appears: "+20% → Sell 33%"
@@ -286,7 +286,7 @@ You can now test these workflows in the real bot UI:
 
 ### Test 4: Add Stop Loss Levels
 
-1. ✅ Click "➕ Add SL"
+1. ✅ Click "⭐ Add SL"
 2. ✅ Enter loss: `20`
 3. ✅ Enter sell: `50`
 4. ✅ Verify SL1 appears: "-20% → Sell 50%"

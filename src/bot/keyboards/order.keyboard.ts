@@ -262,7 +262,7 @@ export function getTPSLLevelsKeyboard(
 	}
 
 	// Add TP Level Button
-	buttons.push([{ text: '➕ Add Take Profit Level', callback_data: `order_addtp_${orderId}` }]);
+	buttons.push([{ text: '⭐ Add Take Profit Level', callback_data: `order_addtp_${orderId}` }]);
 
 	// Stop Loss Levels Section
 	if (stopLossLevels.length > 0) {
@@ -282,7 +282,7 @@ export function getTPSLLevelsKeyboard(
 	}
 
 	// Add SL Level Button
-	buttons.push([{ text: '➕ Add Stop Loss Level', callback_data: `order_addsl_${orderId}` }]);
+	buttons.push([{ text: '⭐ Add Stop Loss Level', callback_data: `order_addsl_${orderId}` }]);
 
 	// Back Button
 	buttons.push([{ text: '🛡️ Back', callback_data: `order_view_${orderId}` }]);

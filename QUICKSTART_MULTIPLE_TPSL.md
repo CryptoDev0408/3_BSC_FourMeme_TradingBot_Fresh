@@ -47,14 +47,14 @@ In the order configuration menu:
 
 **To add Take Profit level:**
 
-1. Tap **"➕ Add TP"**
+1. Tap **"⭐ Add TP"**
 2. Enter PNL percentage (e.g., `20` for +20%)
 3. Enter sell percentage (e.g., `33` to sell 33%)
 4. Done! ✅
 
 **To add Stop Loss level:**
 
-1. Tap **"➕ Add SL"**
+1. Tap **"⭐ Add SL"**
 2. Enter loss percentage (e.g., `20` for -20%)
 3. Enter sell percentage (e.g., `50` to sell 50%)
 4. Done! ✅

@@ -11,7 +11,7 @@ The order creation flow now supports **multiple TP/SL levels with TWO parameters
 
 ### Order Creation UI Flow
 
-When user clicks "➕ Create Order", they now see:
+When user clicks "⭐ Create Order", they now see:
 
 ```
 ⚙️ Configure New Order
@@ -39,10 +39,10 @@ Row: [💰 Amount] [0.01 BNB]
 Row: [📊 Slippage] [10%]
 
 Row: [📈 TP1: +50% → Sell 100%] [🗑]
-Row: [➕ Add Take Profit Level]
+Row: [⭐ Add Take Profit Level]
 
 Row: [📉 SL1: -30% → Sell 100%] [🗑]
-Row: [➕ Add Stop Loss Level]
+Row: [⭐ Add Stop Loss Level]
 
 Row: [✅ Create Order]
 Row: [🛡️ Back to Orders]
@@ -52,14 +52,14 @@ Row: [🛡️ Back to Orders]
 
 **Adding TP Level:**
 
-1. User clicks "➕ Add Take Profit Level"
+1. User clicks "⭐ Add Take Profit Level"
 2. System asks: "At what profit percentage should this TP trigger?" (e.g., 100)
 3. System asks: "How much should be sold when this TP triggers?" (e.g., 50)
 4. Result: New level added "At +100% → Sell 50%"
 
 **Adding SL Level:**
 
-1. User clicks "➕ Add Stop Loss Level"
+1. User clicks "⭐ Add Stop Loss Level"
 2. System asks: "At what loss percentage should this SL trigger?" (e.g., 50)
 3. System asks: "How much should be sold when this SL triggers?" (e.g., 100)
 4. Result: New level added "At -50% → Sell 100%"
@@ -73,7 +73,7 @@ When creating a new order, defaults are:
 
 User can then:
 
-- Add more levels using "➕ Add" buttons
+- Add more levels using "⭐ Add" buttons
 - Delete levels using "🗑" button
 - Click level to edit it (future enhancement)
 
@@ -143,13 +143,13 @@ Order document structure:
 
 2. **Test Flow:**
    - Open Telegram bot
-   - Go to: 📊 Orders → ➕ Create Order
+   - Go to: 📊 Orders → ⭐ Create Order
    - Verify UI shows default TP and SL levels
-   - Click "➕ Add Take Profit Level"
+   - Click "⭐ Add Take Profit Level"
    - Enter PNL percent (e.g., 100)
    - Enter sell percent (e.g., 50)
    - Verify new level appears: "📈 TP2: +100% → Sell 50%"
-   - Click "➕ Add Stop Loss Level"
+   - Click "⭐ Add Stop Loss Level"
    - Enter PNL percent (e.g., 50)
    - Enter sell percent (e.g., 100)
    - Verify new level appears: "📉 SL2: -50% → Sell 100%"
