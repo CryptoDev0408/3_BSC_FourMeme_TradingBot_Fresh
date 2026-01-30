@@ -103,24 +103,18 @@ const OrderSchema = new Schema<IOrder>(
 			type: Boolean,
 		},
 		// NEW: Multiple TP/SL levels
-		takeProfitLevels: {
-			type: [
-				{
-					pnlPercent: { type: Number, required: true, min: 0 },
-					sellPercent: { type: Number, required: true, min: 1, max: 100 },
-				},
-			],
-			default: [{ pnlPercent: 50, sellPercent: 100 }],
-		},
-		stopLossLevels: {
-			type: [
-				{
-					pnlPercent: { type: Number, required: true, min: 0 },
-					sellPercent: { type: Number, required: true, min: 1, max: 100 },
-				},
-			],
-			default: [{ pnlPercent: 30, sellPercent: 100 }],
-		},
+		takeProfitLevels: [
+			{
+				pnlPercent: { type: Number, required: true, min: 0 },
+				sellPercent: { type: Number, required: true, min: 1, max: 100 },
+			},
+		],
+		stopLossLevels: [
+			{
+				pnlPercent: { type: Number, required: true, min: 0 },
+				sellPercent: { type: Number, required: true, min: 1, max: 100 },
+			},
+		],
 		timeLimitEnabled: {
 			type: Boolean,
 			default: false,

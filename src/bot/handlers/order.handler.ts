@@ -14,13 +14,11 @@ import { getUserWallets } from '../../core/wallet/wallet.manager';
 import { Wallet } from '../../database/models/wallet.model';
 import { updateWalletBalance } from '../../core/wallet/wallet.service';
 import { isValidAddress, validateBnbAmount, validateSlippage } from '../../utils/validation';
-import { formatBnb, formatAddress, formatToggle } from '../../utils/formatter';
+import { formatBnb, formatToggle } from '../../utils/formatter';
 import {
 	getOrdersListKeyboard,
-	getOrderDetailKeyboard,
 	getOrderWalletSelectionKeyboard,
 	getOrderAmountKeyboard,
-	getOrderTPSLKeyboard,
 	getOrderGasKeyboard,
 	getOrderSlippageKeyboard,
 	getOrderRemoveConfirmKeyboard,
@@ -381,7 +379,6 @@ export async function showOrderPositions(chatId: string, orderId: string, messag
 		// Get positions for this order
 		const { Position } = await import('../../database/models');
 		const { PositionStatus } = await import('../../config/constants');
-		const { formatBnb, formatPercent } = await import('../../utils/formatter');
 
 		const positions = await Position.find({ orderId, userId: user._id })
 			.sort({ createdAt: -1 })
