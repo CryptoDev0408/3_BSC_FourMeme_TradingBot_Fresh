@@ -67,6 +67,8 @@ export async function createOrder(
 		stopLossEnabled?: boolean;
 		takeProfitLevels?: Array<{ pnlPercent: number; sellPercent: number }>;
 		stopLossLevels?: Array<{ pnlPercent: number; sellPercent: number }>;
+		timeLimitEnabled?: boolean;
+		timeLimitSeconds?: number;
 		orderName?: string;
 	}
 ): Promise<OrderResult> {
@@ -110,6 +112,8 @@ export async function createOrder(
 			tradingAmount: customConfig?.tradingAmount ?? 0.01,
 			takeProfitLevels,
 			stopLossLevels,
+			timeLimitEnabled: customConfig?.timeLimitEnabled ?? false,
+			timeLimitSeconds: customConfig?.timeLimitSeconds ?? 300,
 			slippage: customConfig?.slippage ?? 10,
 			gasFee: {
 				gasPrice: '5',

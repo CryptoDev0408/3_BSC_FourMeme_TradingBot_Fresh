@@ -42,7 +42,7 @@ Row: [📈 TP1: +50% → Sell 100%] [🗑]
 Row: [⭐ Add Take Profit Level]
 
 Row: [📉 SL1: -30% → Sell 100%] [🗑]
-Row: [⭐ Add Stop Loss Level]
+Row: [🍁 Add Stop Loss Level]
 
 Row: [✅ Create Order]
 Row: [🛡️ Back to Orders]
@@ -59,7 +59,7 @@ Row: [🛡️ Back to Orders]
 
 **Adding SL Level:**
 
-1. User clicks "⭐ Add Stop Loss Level"
+1. User clicks "🍁 Add Stop Loss Level"
 2. System asks: "At what loss percentage should this SL trigger?" (e.g., 50)
 3. System asks: "How much should be sold when this SL triggers?" (e.g., 100)
 4. Result: New level added "At -50% → Sell 100%"
@@ -149,7 +149,7 @@ Order document structure:
    - Enter PNL percent (e.g., 100)
    - Enter sell percent (e.g., 50)
    - Verify new level appears: "📈 TP2: +100% → Sell 50%"
-   - Click "⭐ Add Stop Loss Level"
+   - Click "🍁 Add Stop Loss Level"
    - Enter PNL percent (e.g., 50)
    - Enter sell percent (e.g., 100)
    - Verify new level appears: "📉 SL2: -50% → Sell 100%"

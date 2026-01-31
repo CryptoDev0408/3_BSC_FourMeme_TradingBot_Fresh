@@ -376,6 +376,12 @@ function setupCallbackHandlers(): void {
 				await handleOrderCreate(chatId, query.message?.message_id);
 			} else if (data === 'order_config_cancel') {
 				await handleOrderConfigCancel(chatId, query.message?.message_id);
+			} else if (data === 'order_config_timelimittoggle') {
+				const { handleOrderConfigTimeLimitToggle } = await import('./handlers/order.handler');
+				await handleOrderConfigTimeLimitToggle(chatId, query.message?.message_id);
+			} else if (data === 'order_config_timelimit') {
+				const { handleOrderConfigTimeLimit } = await import('./handlers/order.handler');
+				await handleOrderConfigTimeLimit(chatId, query.message?.message_id);
 			} else if (data === 'order_config_addtp') {
 				const { handleOrderConfigAddTP } = await import('./handlers/order.handler');
 				await handleOrderConfigAddTP(chatId, query.message?.message_id);

@@ -52,6 +52,8 @@ interface UserState {
 		slippage: number;
 		takeProfitLevels: Array<{ pnlPercent: number; sellPercent: number }>;
 		stopLossLevels: Array<{ pnlPercent: number; sellPercent: number }>;
+		timeLimitEnabled: boolean;
+		timeLimitSeconds: number;
 	};
 }
 
@@ -279,7 +281,7 @@ export async function showOrderDetail(chatId: string, orderId: string, messageId
 
 			// Add SL button
 			keyboard.inline_keyboard.push([
-				{ text: '⭐ Add Stop Loss Level', callback_data: `order_addsl_${orderId}` },
+				{ text: '🍁 Add Stop Loss Level', callback_data: `order_addsl_${orderId}` },
 			]);
 
 			// Time Limit, Gas settings
@@ -491,6 +493,8 @@ export async function handleOrderCreate(chatId: string, messageId?: number): Pro
 				slippage: 10,
 				takeProfitLevels: [{ pnlPercent: 50, sellPercent: 100 }],
 				stopLossLevels: [{ pnlPercent: 30, sellPercent: 100 }],
+				timeLimitEnabled: false,
+				timeLimitSeconds: 300,
 			},
 		});
 
@@ -550,12 +554,15 @@ async function showOrderCreateConfig(chatId: string, messageId?: number): Promis
 			});
 		}
 
+		const formatToggle = (enabled: boolean) => (enabled ? '✅' : '❌');
+
 		const text = `
 ⚙️ <b>Configure New Order</b>
 
 ${walletInfo}<b>Trading Settings:</b>
 💰 Buy Amount: <b>${config.tradingAmount} BNB</b>
 📊 Slippage: <b>${config.slippage}%</b>
+⏱ Time Limit: <b>${config.timeLimitSeconds}s</b> ${formatToggle(config.timeLimitEnabled)}
 
 ${tpText}${slText}
 <i>Configure each setting then click Create</i>
@@ -617,6 +624,15 @@ ${tpText}${slText}
 		// Add SL button
 		keyboard.inline_keyboard.push([
 			{ text: '⭐ Add Stop Loss Level', callback_data: 'order_config_addsl' },
+		]);
+
+		// Time Limit row
+		keyboard.inline_keyboard.push([
+			{
+				text: config.timeLimitEnabled ? '✅ Time Limit' : '❌ Time Limit',
+				callback_data: 'order_config_timelimittoggle'
+			},
+			{ text: `${config.timeLimitSeconds}s`, callback_data: 'order_config_timelimit' },
 		]);
 
 		// Create and Back buttons
@@ -878,6 +894,57 @@ export async function handleOrderSetConfigSlippage(chatId: string, slippage: num
 	await showOrderCreateConfig(chatId, messageId);
 }
 
+/**
+ * Toggle Time Limit enabled for Create Order config
+ */
+export async function handleOrderConfigTimeLimitToggle(chatId: string, messageId?: number): Promise<void> {
+	try {
+		const state = userStates.get(chatId);
+		if (!state || !state.orderConfig) return;
+
+		state.orderConfig.timeLimitEnabled = !state.orderConfig.timeLimitEnabled;
+		userStates.set(chatId, state);
+
+		await showOrderCreateConfig(chatId, messageId);
+	} catch (error: any) {
+		logger.error('Failed to toggle Time Limit:', error.message);
+	}
+}
+
+/**
+ * Handle Time Limit input for Create Order config
+ */
+export async function handleOrderConfigTimeLimit(chatId: string, messageId?: number): Promise<void> {
+	try {
+		const text = '⏱ <b>Time Limit Configuration</b>\n\nEnter time limit in seconds (10-86400):\n\n<i>Example: 300 (5 minutes)</i>';
+
+		userStates.set(chatId, {
+			...userStates.get(chatId),
+			action: 'order_config_timelimit_input',
+		});
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'order_config_back' }]],
+				},
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'order_config_back' }]],
+				},
+			});
+		}
+	} catch (error: any) {
+		logger.error('Failed to handle time limit input:', error.message);
+	}
+}
+
 // ========== OLD SINGLE TP/SL HANDLERS - DEPRECATED ==========
 // These are kept for compatibility but should not be used with new array-based system
 
@@ -1089,6 +1156,8 @@ export async function handleOrderConfigCreate(chatId: string, messageId?: number
 			slippage: config.slippage,
 			takeProfitLevels: config.takeProfitLevels,
 			stopLossLevels: config.stopLossLevels,
+			timeLimitEnabled: config.timeLimitEnabled,
+			timeLimitSeconds: config.timeLimitSeconds,
 		});
 
 		// Clear state
@@ -1885,6 +1954,24 @@ export async function handleOrderTextMessage(msg: any): Promise<boolean> {
 			}
 
 			// Show main config screen
+			await showOrderCreateConfig(chatId);
+			return true;
+		}
+
+		// Handle Time Limit input for Create Order config
+		if (state.action === 'order_config_timelimit_input') {
+			const seconds = parseInt(text);
+			if (isNaN(seconds) || seconds < 10 || seconds > 86400) {
+				await getBot().sendMessage(chatId, '❌ Invalid time limit. Must be between 10 and 86400 seconds (24 hours).');
+				return true;
+			}
+
+			// Update config
+			if (state.orderConfig) {
+				state.orderConfig.timeLimitSeconds = seconds;
+			}
+
+			await getBot().sendMessage(chatId, '✅ Time limit updated!');
 			await showOrderCreateConfig(chatId);
 			return true;
 		}
