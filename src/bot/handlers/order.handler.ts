@@ -1110,8 +1110,8 @@ export async function handleOrderConfigCreate(chatId: string, messageId?: number
 			parse_mode: 'HTML',
 		});
 
-		// Show order detail
-		await showOrderDetail(chatId, result.order!._id.toString());
+		// Show orders list
+		await showOrdersList(chatId);
 	} catch (error: any) {
 		logger.error('Failed to create order:', error.message);
 		await getBot().sendMessage(chatId, '❌ Failed to create order. Please try again.');
@@ -1157,8 +1157,8 @@ export async function confirmOrderCreate(chatId: string, messageId?: number): Pr
 			parse_mode: 'HTML',
 		});
 
-		// Show order detail
-		await showOrderDetail(chatId, result.order!._id.toString());
+		// Show orders list
+		await showOrdersList(chatId);
 	} catch (error: any) {
 		logger.error('Failed to create order:', error.message);
 		await getBot().sendMessage(chatId, '❌ Failed to create order. Please try again.');
