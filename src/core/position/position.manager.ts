@@ -67,23 +67,22 @@ export class PositionManager {
 						takeProfitPercent: pos.takeProfitTarget,
 						stopLossPercent: pos.stopLossTarget,
 						takeProfitEnabled: takeProfitEnabled,  // Read from order
-					// NEW: Load multiple TP/SL levels from position
-					takeProfitLevels: pos.takeProfitLevels || [],
-					stopLossLevels: pos.stopLossLevels || [],
-					triggeredTakeProfitLevels: pos.triggeredTakeProfitLevels || [],
-					triggeredStopLossLevels: pos.triggeredStopLossLevels || [],
-
 						stopLossEnabled: stopLossEnabled,      // Read from order
+						// NEW: Load multiple TP/SL levels from position
+						takeProfitLevels: pos.takeProfitLevels || [],
+						stopLossLevels: pos.stopLossLevels || [],
+						triggeredTakeProfitLevels: pos.triggeredTakeProfitLevels || [],
+						triggeredStopLossLevels: pos.triggeredStopLossLevels || [],
 					});
 
-					this.positions.set(pos._id.toString(), bPosition);
+					this.positions.set(bPosition.id, bPosition);
 				} catch (error: any) {
 					logger.error(`Failed to load position ${pos._id}: ${error.message}`);
 				}
 			}
 
 			this.initialized = true;
-			logger.success(`Position Manager initialized with ${this.positions.size} open positions`);
+			logger.success(`✅ Position Manager initialized with ${this.positions.size} open positions`);
 		} catch (error: any) {
 			logger.error(`Failed to initialize Position Manager: ${error.message}`);
 			throw error;
