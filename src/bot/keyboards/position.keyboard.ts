@@ -48,6 +48,9 @@ export function getPositionDetailKeyboard(positionId: string, status: PositionSt
 		keyboard.inline_keyboard.push([
 			{ text: '🔴 Sell Position', callback_data: `position_sell_${positionId}` },
 		]);
+		keyboard.inline_keyboard.push([
+			{ text: '🗑️ Remove Position', callback_data: `position_remove_${positionId}` },
+		]);
 	}
 
 	// Navigation buttons

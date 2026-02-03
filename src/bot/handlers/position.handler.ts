@@ -242,6 +242,68 @@ export async function showPositionDetail(chatId: string, positionId: string, mes
 }
 
 /**
+ * Handle manual position removal (for wallet trades not synced with bot)
+ */
+export async function handlePositionRemove(chatId: string, positionId: string, messageId?: number): Promise<void> {
+	try {
+		// Get user
+		const user = await User.findOne({ chatId });
+		if (!user) {
+			await getBot().sendMessage(chatId, '❌ User not found.');
+			return;
+		}
+
+		// Get position
+		const position = await Position.findOne({ _id: positionId, userId: user._id });
+		if (!position) {
+			await getBot().sendMessage(chatId, '❌ Position not found.');
+			return;
+		}
+
+		// Import positionManager here to avoid circular dependency
+		const { positionManager } = await import('../../core/position/position.manager');
+
+		// Remove position from database and memory
+		await positionManager.removePosition(positionId);
+
+		const text = `✅ <b>Position Removed</b>\n\n` +
+			`Token: <b>${position.tokenSymbol}</b>\n` +
+			`Amount: ${formatBnb(position.buyAmount)} BNB\n\n` +
+			`⚠️ <b>Note:</b> This position was removed from the bot database only.\n` +
+			`If you still hold tokens in your wallet, you need to sell them manually.`;
+
+		if (messageId) {
+			await getBot().editMessageText(text, {
+				chat_id: chatId,
+				message_id: messageId,
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [
+						[{ text: '◀️ Back to Positions', callback_data: 'positions' }],
+						[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]
+					]
+				}
+			});
+		} else {
+			await getBot().sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [
+						[{ text: '◀️ Back to Positions', callback_data: 'positions' }],
+						[{ text: '🏠 Main Menu', callback_data: 'main_menu' }]
+					]
+				}
+			});
+		}
+
+		logger.info(`Position ${positionId} removed by user ${user.chatId}`);
+	} catch (error: any) {
+		logger.error('Failed to remove position:', error.message);
+		await getBot().sendMessage(chatId, '❌ Failed to remove position. Please try again.');
+	}
+}
+
+/**
  * Handle position sell
  */
 export async function handlePositionSell(chatId: string, positionId: string, messageId?: number): Promise<void> {

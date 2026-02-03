@@ -170,7 +170,7 @@ export class PositionManager {
 	}
 
 	/**
-	 * Close position
+	 * Close position (after successful sell)
 	 */
 	async closePosition(positionId: string, sellPrice: number, sellTxHash: string): Promise<void> {
 		const position = this.positions.get(positionId);
@@ -187,6 +187,19 @@ export class PositionManager {
 		// Remove from memory immediately
 		this.positions.delete(positionId);
 		logger.success(`Position closed and deleted: ${positionId}`);
+	}
+
+	/**
+	 * Remove position manually (for wallet trades not synced with bot)
+	 * This removes the position from DB and memory without executing a sell transaction
+	 */
+	async removePosition(positionId: string): Promise<void> {
+		// Delete from database
+		await Position.findByIdAndDelete(positionId);
+
+		// Remove from memory
+		this.positions.delete(positionId);
+		logger.success(`Position manually removed: ${positionId}`);
 	}
 
 	/**

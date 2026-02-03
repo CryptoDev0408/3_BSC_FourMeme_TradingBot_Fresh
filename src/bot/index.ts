@@ -77,6 +77,7 @@ import {
 	showPositionsList,
 	showPositionDetail,
 	handlePositionSell,
+	handlePositionRemove,
 	setBotInstance as setPositionBotInstance,
 } from './handlers/position.handler';
 import {
@@ -579,6 +580,9 @@ function setupCallbackHandlers(): void {
 			} else if (data.startsWith('position_sell_')) {
 				const positionId = data.replace('position_sell_', '');
 				await handlePositionSell(chatId, positionId, query.message?.message_id);
+			} else if (data.startsWith('position_remove_')) {
+				const positionId = data.replace('position_remove_', '');
+				await handlePositionRemove(chatId, positionId, query.message?.message_id);
 			} else if (data === 'transactions') {
 				console.log('[BOT] Routing to transactions handler');
 				await showTransactionsList(chatId, query.message?.message_id);
