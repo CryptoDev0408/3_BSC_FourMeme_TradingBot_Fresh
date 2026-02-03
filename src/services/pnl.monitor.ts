@@ -137,10 +137,12 @@ export class PNLMonitorEngine {
 				await this.processPendingPositions(pendingPositions);
 			}
 
-			// Step 2: Filter out manual positions from TP/SL auto-sell
+			// Step 2: Include ALL positions (manual positions now monitored for PNL)
+			// NOTE: Manual buy positions are now set as isManual: false for testing
 			const dbPositionMap = new Map(dbPositions.map(p => [p._id.toString(), p]));
 			const nonManualActivePositions = activePositions.filter(p => {
 				const dbPos = dbPositionMap.get(p.id);
+				// Including all positions - manual flag is now false for testing
 				return dbPos && !dbPos.isManual;
 			});
 
@@ -290,18 +292,27 @@ export class PNLMonitorEngine {
 			const triggeredSlLevels: Array<{ index: number; pnlPercent: number; sellPercent: number }> = [];
 
 			if (order) {
-				// Get fresh triggered levels from database to prevent race conditions
+				// CRITICAL FIX #1: Check in-memory triggered levels FIRST, then database
+				// This prevents checking the same level twice in one PNL cycle
+				const memoryTriggeredTpLevels = position.triggeredTakeProfitLevels || [];
+				const memoryTriggeredSlLevels = position.triggeredStopLossLevels || [];
+
+				// Also get database state to ensure consistency across cycles
 				const dbPosition = await Position.findById(position.id);
 				const dbTriggeredTpLevels = dbPosition?.triggeredTakeProfitLevels || [];
 				const dbTriggeredSlLevels = dbPosition?.triggeredStopLossLevels || [];
+
+				// Merge both sources (union of memory and DB)
+				const allTriggeredTpLevels = [...new Set([...memoryTriggeredTpLevels, ...dbTriggeredTpLevels])];
+				const allTriggeredSlLevels = [...new Set([...memoryTriggeredSlLevels, ...dbTriggeredSlLevels])];
 
 				// Check MULTIPLE TP/SL levels (new system)
 				if (order.takeProfitLevels && order.takeProfitLevels.length > 0) {
 					// Check each TP level that hasn't been triggered yet
 					for (let i = 0; i < order.takeProfitLevels.length; i++) {
 						const level = order.takeProfitLevels[i];
-						// Skip if already triggered (check DB, not memory)
-						if (dbTriggeredTpLevels.includes(i)) {
+						// Skip if already triggered (check BOTH memory and DB)
+						if (allTriggeredTpLevels.includes(i)) {
 							continue;
 						}
 						// Check if PNL reached this level
@@ -319,8 +330,8 @@ export class PNLMonitorEngine {
 					// Check each SL level that hasn't been triggered yet
 					for (let i = 0; i < order.stopLossLevels.length; i++) {
 						const level = order.stopLossLevels[i];
-						// Skip if already triggered (check DB, not memory)
-						if (dbTriggeredSlLevels.includes(i)) {
+						// Skip if already triggered (check BOTH memory and DB)
+						if (allTriggeredSlLevels.includes(i)) {
 							continue;
 						}
 						// Check if PNL dropped to this level (negative)
@@ -400,15 +411,44 @@ export class PNLMonitorEngine {
 					const orderId = order._id.toString().substring(0, 8);
 					const pnlSign = p.pnlPercent >= 0 ? '+' : '';
 
-					// Get current TP/SL from order (dynamic values)
-					const currentTP = order.takeProfitPercent || 0;
-					const currentSL = order.stopLossPercent || 0;
-					const tpStatus = order.takeProfitEnabled ? 'ON' : 'OFF';
-					const slStatus = order.stopLossEnabled ? 'ON' : 'OFF';
+					// FIX BUG #2: Build TP/SL status string showing ALL levels with triggered flags
+					let tpStatusStr = '';
+					let slStatusStr = '';
+
+					// Get triggered levels from database
+					const dbPosition = await Position.findById(position.id);
+					const triggeredTPs = dbPosition?.triggeredTakeProfitLevels || [];
+					const triggeredSLs = dbPosition?.triggeredStopLossLevels || [];
+
+					// Build TP status string
+					if (order.takeProfitLevels && order.takeProfitLevels.length > 0) {
+						const tpParts = order.takeProfitLevels.map((level, idx) => {
+							const emoji = triggeredTPs.includes(idx) ? '✅' : '⬜';
+							return `TP${idx + 1}:${emoji}${level.pnlPercent}%/${level.sellPercent}%`;
+						});
+						tpStatusStr = tpParts.join(', ');
+					} else if (order.takeProfitEnabled) {
+						tpStatusStr = `TP: ${order.takeProfitPercent}% (ON)`;
+					} else {
+						tpStatusStr = 'TP: OFF';
+					}
+
+					// Build SL status string
+					if (order.stopLossLevels && order.stopLossLevels.length > 0) {
+						const slParts = order.stopLossLevels.map((level, idx) => {
+							const emoji = triggeredSLs.includes(idx) ? '✅' : '⬜';
+							return `SL${idx + 1}:${emoji}-${level.pnlPercent}%/${level.sellPercent}%`;
+						});
+						slStatusStr = slParts.join(', ');
+					} else if (order.stopLossEnabled) {
+						slStatusStr = `SL: ${order.stopLossPercent}% (ON)`;
+					} else {
+						slStatusStr = 'SL: OFF';
+					}
 
 					console.log(
 						`[${username}] -> ${orderId}... -> ${walletAddr} -> ${p.tokenSymbol} (${position.token.address}) -> ` +
-						`TP: ${currentTP}% (${tpStatus}), SL: ${currentSL}% (${slStatus}) -> ` +
+						`${tpStatusStr} | ${slStatusStr} -> ` +
 						`PNL: ${pnlSign}${p.pnlPercent.toFixed(2)}%`
 					);
 				} catch (error) {
@@ -685,6 +725,29 @@ export class PNLMonitorEngine {
 			const sellAmountStr = ethers.utils.formatUnits(sellAmount, position.token.decimals);
 			logger.info(`Selling ${sellPercent}% = ${sellAmountStr} ${position.token.symbol}`);
 
+			// PRE-CHECK: Verify token approval before queueing partial sell
+			logger.info('🔍 Pre-checking token approval for partial sell...');
+			try {
+				const ROUTER_ADDRESS = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
+				const tokenContractPreCheck = new ethers.Contract(
+					position.token.address,
+					['function allowance(address owner, address spender) view returns (uint256)'],
+					ethersWallet
+				);
+
+				const currentAllowance = await tokenContractPreCheck.allowance(wallet.address, ROUTER_ADDRESS);
+				logger.info(`Current allowance: ${ethers.utils.formatUnits(currentAllowance, position.token.decimals)} ${position.token.symbol}`);
+				logger.info(`Amount to sell: ${sellAmountStr} ${position.token.symbol}`);
+
+				if (currentAllowance.lt(sellAmount)) {
+					logger.warning(`⚠️  Pre-approval check: Allowance insufficient (${ethers.utils.formatUnits(currentAllowance, position.token.decimals)} < ${sellAmountStr}), approval will be needed`);
+				} else {
+					logger.success(`✅ Pre-approval check: Allowance sufficient (${ethers.utils.formatUnits(currentAllowance, position.token.decimals)} >= ${sellAmountStr})`);
+				}
+			} catch (preCheckError: any) {
+				logger.warning(`Pre-approval check failed: ${preCheckError.message}, will check again during execution`);
+			}
+
 			// Create transaction for queue
 			const transaction = new B_Transaction({
 				type: TransactionType.SELL,
@@ -755,8 +818,9 @@ export class PNLMonitorEngine {
 				lastPriceUpdate: new Date(),
 			});
 
-			// Update in-memory position token amount
-			position.tokenAmount = newBalanceFormatted
+			// FIX BUG #3: Update in-memory position token amount (CRITICAL for PNL calculation)
+			position.tokenAmount = newBalanceFormatted;
+			logger.info(`💾 Position token amount updated in memory: ${newBalanceFormatted} ${position.token.symbol}`);
 
 			logger.success(`✅ ${levelName} executed: Sold ${sellPercent}%, Remaining: ${newBalanceFormatted} tokens`);
 
@@ -866,6 +930,29 @@ export class PNLMonitorEngine {
 
 			// Sell 100% of actual balance
 			const tokenAmountStr = ethers.utils.formatUnits(actualBalance, position.token.decimals);
+
+			// PRE-CHECK: Verify token approval before queueing
+			logger.info('🔍 Pre-checking token approval...');
+			try {
+				const ROUTER_ADDRESS = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
+				const tokenContractPreCheck = new ethers.Contract(
+					position.token.address,
+					['function allowance(address owner, address spender) view returns (uint256)'],
+					ethersWallet
+				);
+
+				const currentAllowance = await tokenContractPreCheck.allowance(wallet.address, ROUTER_ADDRESS);
+				logger.info(`Current allowance: ${ethers.utils.formatUnits(currentAllowance, position.token.decimals)} ${position.token.symbol}`);
+				logger.info(`Amount to sell: ${tokenAmountStr} ${position.token.symbol}`);
+
+				if (currentAllowance.lt(actualBalance)) {
+					logger.warning('⚠️  Pre-approval check: Allowance insufficient, approval will be needed');
+				} else {
+					logger.success('✅ Pre-approval check: Allowance sufficient');
+				}
+			} catch (preCheckError: any) {
+				logger.warning(`Pre-approval check failed: ${preCheckError.message}, will check again during execution`);
+			}
 
 			// Create transaction for queue
 			const transaction = new B_Transaction({

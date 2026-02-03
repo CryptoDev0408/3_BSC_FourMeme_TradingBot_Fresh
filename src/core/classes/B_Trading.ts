@@ -164,28 +164,73 @@ export class B_Trading {
 
 			// Parse token amount
 			const amountIn = ethers.utils.parseUnits(tokenAmount, token.decimals);
+			logger.info(`Parsed sell amount: ${amountIn.toString()} (${tokenAmount} ${token.symbol})`);
 
-			// Check token approval
+			// Verify token amount is positive
+			if (amountIn.lte(0)) {
+				throw new Error('Token amount must be greater than 0');
+			}
+
+			// Check token approval with comprehensive logging
 			const erc20Abi = [
 				'function allowance(address owner, address spender) view returns (uint256)',
 				'function approve(address spender, uint256 amount) returns (bool)',
+				'function balanceOf(address owner) view returns (uint256)',
 			];
 			const tokenContract = new ethers.Contract(token.address, erc20Abi, ethersWallet);
 
+			// Check actual token balance
+			const actualBalance = await tokenContract.balanceOf(wallet.address);
+			logger.info(`Token balance: ${ethers.utils.formatUnits(actualBalance, token.decimals)} ${token.symbol}`);
+
+			if (actualBalance.lt(amountIn)) {
+				const errorMsg = `Insufficient token balance: have ${ethers.utils.formatUnits(actualBalance, token.decimals)}, need ${tokenAmount}`;
+				logger.error(errorMsg);
+				throw new Error(errorMsg);
+			}
+
+			// Check and handle approval
 			const allowance = await tokenContract.allowance(wallet.address, this.ROUTER_ADDRESS);
+			logger.info(`Current allowance: ${ethers.utils.formatUnits(allowance, token.decimals)} ${token.symbol}`);
+			logger.info(`Required amount: ${ethers.utils.formatUnits(amountIn, token.decimals)} ${token.symbol}`);
 
 			if (allowance.lt(amountIn)) {
-				logger.info('Approving token...');
-				const approveTx = await tokenContract.approve(
-					this.ROUTER_ADDRESS,
-					ethers.constants.MaxUint256,
-					{
-						gasPrice: ethers.utils.parseUnits(gasPrice, 'gwei'),
-						gasLimit: 100000,
+				logger.warning(`⚠️  Insufficient allowance! Current: ${ethers.utils.formatUnits(allowance, token.decimals)}, Required: ${ethers.utils.formatUnits(amountIn, token.decimals)}`);
+				logger.info('🔐 Approving token for unlimited spending...');
+
+				try {
+					// Approve with MaxUint256 for future transactions
+					const approveTx = await tokenContract.approve(
+						this.ROUTER_ADDRESS,
+						ethers.constants.MaxUint256,
+						{
+							gasPrice: ethers.utils.parseUnits(gasPrice, 'gwei'),
+							gasLimit: 100000,
+						}
+					);
+
+					logger.info(`Approval TX sent: ${approveTx.hash}`);
+					const approveReceipt = await approveTx.wait();
+
+					if (approveReceipt.status !== 1) {
+						throw new Error('Approval transaction failed (status = 0)');
 					}
-				);
-				await approveTx.wait();
-				logger.success('Token approved');
+
+					logger.success(`✅ Token approved! TX: ${approveTx.hash}, Block: ${approveReceipt.blockNumber}`);
+
+					// Verify approval was successful
+					const newAllowance = await tokenContract.allowance(wallet.address, this.ROUTER_ADDRESS);
+					logger.info(`New allowance: ${ethers.utils.formatUnits(newAllowance, token.decimals)} ${token.symbol}`);
+
+					if (newAllowance.lt(amountIn)) {
+						throw new Error(`Approval verification failed: allowance still insufficient (${ethers.utils.formatUnits(newAllowance, token.decimals)} < ${tokenAmount})`);
+					}
+				} catch (approveError: any) {
+					logger.error(`Approval failed: ${approveError.message}`);
+					throw new Error(`Token approval failed: ${approveError.message}`);
+				}
+			} else {
+				logger.success(`✅ Allowance sufficient (${ethers.utils.formatUnits(allowance, token.decimals)} >= ${tokenAmount})`);
 			}
 
 			// Get expected output amount
