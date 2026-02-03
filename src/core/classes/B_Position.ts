@@ -33,6 +33,7 @@ export class B_Position {
 	public token: B_Token;
 	public tokenAmount: number;
 	public bnbSpent: number;
+	public buyAmount: number; // Alias for bnbSpent (matches database field)
 	public buyPrice: number; // BNB per token
 	public currentPrice: number;
 	public status: PositionStatus;
@@ -86,6 +87,7 @@ export class B_Position {
 		// Ensure tokenAmount is always a number (handle string from DB)
 		this.tokenAmount = typeof data.tokenAmount === 'string' ? parseFloat(data.tokenAmount) : data.tokenAmount;
 		this.bnbSpent = typeof data.bnbSpent === 'string' ? parseFloat(data.bnbSpent) : data.bnbSpent;
+		this.buyAmount = this.bnbSpent; // Initialize buyAmount as alias for bnbSpent
 		this.buyPrice = typeof data.buyPrice === 'string' ? parseFloat(data.buyPrice) : data.buyPrice;
 		this.currentPrice = data.currentPrice ? (typeof data.currentPrice === 'string' ? parseFloat(data.currentPrice) : data.currentPrice) : this.buyPrice;
 		this.status = data.status || PositionStatus.ACTIVE;

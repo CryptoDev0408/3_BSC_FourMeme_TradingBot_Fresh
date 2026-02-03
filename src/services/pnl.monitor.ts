@@ -815,14 +815,24 @@ export class PNLMonitorEngine {
 			const newBalance = await tokenContract.balanceOf(wallet.address);
 			const newBalanceFormatted = parseFloat(ethers.utils.formatUnits(newBalance, position.token.decimals));
 
+			// CRITICAL FIX: Calculate new cost basis (buyAmount) proportionally
+			// When selling X%, the remaining position's cost basis should be (100-X)% of original
+			const percentRemaining = 100 - sellPercent; // e.g., if sold 40%, remaining is 60%
+			const newBuyAmount = position.buyAmount * (percentRemaining / 100);
+
+			logger.info(`💰 Cost basis adjustment: ${position.buyAmount.toFixed(6)} BNB → ${newBuyAmount.toFixed(6)} BNB (${percentRemaining}% remaining)`);
+
 			await Position.findByIdAndUpdate(positionId, {
 				tokenAmount: newBalanceFormatted,
+				buyAmount: newBuyAmount, // Update cost basis proportionally
 				lastPriceUpdate: new Date(),
 			});
 
-			// FIX BUG #3: Update in-memory position token amount (CRITICAL for PNL calculation)
+			// Update in-memory position (CRITICAL for PNL calculation)
 			position.tokenAmount = newBalanceFormatted;
-			logger.info(`💾 Position token amount updated in memory: ${newBalanceFormatted} ${position.token.symbol}`);
+			position.buyAmount = newBuyAmount;
+			position.bnbSpent = newBuyAmount; // Keep bnbSpent in sync with buyAmount
+			logger.info(`💾 Position updated in memory: ${newBalanceFormatted} ${position.token.symbol}, Cost: ${newBuyAmount.toFixed(6)} BNB`);
 
 			logger.success(`✅ ${levelName} executed: Sold ${sellPercent}%, Remaining: ${newBalanceFormatted} tokens`);
 
