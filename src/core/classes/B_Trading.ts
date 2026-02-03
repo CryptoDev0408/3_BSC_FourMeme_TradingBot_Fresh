@@ -74,16 +74,16 @@ export class B_Trading {
 			logger.info(`Expected Out: ${ethers.utils.formatUnits(expectedOut, token.decimals)} ${token.symbol}`);
 			logger.info(`Min Amount Out (${slippage}% slippage): ${ethers.utils.formatUnits(minAmountOut, token.decimals)} ${token.symbol}`);
 
-			// Execute swap
-			const tx = await routerWithSigner.swapExactETHForTokens(
+			// Execute swap - USING TAX-COMPATIBLE FUNCTION
+			const tx = await routerWithSigner.swapExactETHForTokensSupportingFeeOnTransferTokens(
 				minAmountOut,
 				path,
 				wallet.address,
 				deadline,
 				{
 					value: amountIn,
-					gasPrice: ethers.utils.parseUnits(gasPrice, 'gwei'),
-					gasLimit,
+					gasPrice: ethers.utils.parseUnits(String(gasPrice), 'gwei'),
+					gasLimit: ethers.BigNumber.from(gasLimit),
 				}
 			);
 
@@ -204,8 +204,8 @@ export class B_Trading {
 						this.ROUTER_ADDRESS,
 						ethers.constants.MaxUint256,
 						{
-							gasPrice: ethers.utils.parseUnits(gasPrice, 'gwei'),
-							gasLimit: 100000,
+							gasPrice: ethers.utils.parseUnits(String(gasPrice), 'gwei'),
+							gasLimit: ethers.BigNumber.from(100000),
 						}
 					);
 
@@ -249,16 +249,16 @@ export class B_Trading {
 			logger.info(`Expected Out: ${ethers.utils.formatEther(expectedOut)} BNB`);
 			logger.info(`Min Amount Out (${slippage}% slippage): ${ethers.utils.formatEther(minAmountOut)} BNB`);
 
-			// Execute swap
-			const tx = await routerWithSigner.swapExactTokensForETH(
+			// Execute swap - USING TAX-COMPATIBLE FUNCTION
+			const tx = await routerWithSigner.swapExactTokensForETHSupportingFeeOnTransferTokens(
 				amountIn,
 				minAmountOut,
 				path,
 				wallet.address,
 				deadline,
 				{
-					gasPrice: ethers.utils.parseUnits(gasPrice, 'gwei'),
-					gasLimit,
+					gasPrice: ethers.utils.parseUnits(String(gasPrice), 'gwei'),
+					gasLimit: ethers.BigNumber.from(gasLimit),
 				}
 			);
 
@@ -401,11 +401,7 @@ export class B_Trading {
 			const minAmountOut = expectedOut.mul(10000 - slippageBps).div(10000);
 			const deadline = Math.floor(Date.now() / 1000) + 600;
 
-			const gasEstimate = await routerWithSigner.swapExactETHForTokens.estimateGas(
-				minAmountOut,
-				path,
-				wallet.address,
-				deadline,
+			const gasEstimate = await routerWithSigner.swapExactETHForTokensSupportingFeeOnTransferTokens.estimateGas(
 				{ value: amountIn }
 			);
 
@@ -441,11 +437,7 @@ export class B_Trading {
 			const minAmountOut = expectedOut.mul(10000 - slippageBps).div(10000);
 			const deadline = Math.floor(Date.now() / 1000) + 600;
 
-			const gasEstimate = await routerWithSigner.swapExactTokensForETH.estimateGas(
-				amountIn,
-				minAmountOut,
-				path,
-				wallet.address,
+			const gasEstimate = await routerWithSigner.swapExactTokensForETHSupportingFeeOnTransferTokens.estimateGas(
 				deadline
 			);
 

@@ -114,6 +114,10 @@ export async function executeBuyOrder(
 			decimals: tokenMetadata.decimals || 18,
 		});
 
+		// Ensure gas parameters are properly formatted
+		const gasPriceStr = String(order.gasFee.gasPrice || '5');
+		const gasLimitNum = Number(order.gasFee.gasLimit || 300000);
+
 		// Create transaction for queue
 		const transaction = new B_Transaction({
 			type: TxType.BUY,
@@ -121,8 +125,8 @@ export async function executeBuyOrder(
 			token: bToken,
 			bnbAmount: order.tradingAmount,
 			slippage: order.slippage,
-			gasPrice: order.gasFee.gasPrice,
-			gasLimit: order.gasFee.gasLimit,
+			gasPrice: gasPriceStr,
+			gasLimit: gasLimitNum,
 			orderId: order._id.toString(),
 			userId: order.userId.toString(),
 			priority: 10, // Normal priority for buys

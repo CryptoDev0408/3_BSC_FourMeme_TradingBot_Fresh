@@ -674,8 +674,10 @@ export class PNLMonitorEngine {
 				const bnbBalanceFormatted = parseFloat(ethers.utils.formatEther(bnbBalance));
 
 				// Calculate estimated gas cost from order settings
+				// gasPrice is in gwei (string), convert to wei (BigNumber)
+				const gasPriceWei = ethers.utils.parseUnits(String(order.gasFee.gasPrice || '5'), 'gwei');
 				const estimatedGasCost = parseFloat(ethers.utils.formatEther(
-					ethers.BigNumber.from(order.gasFee.gasLimit).mul(order.gasFee.gasPrice)
+					ethers.BigNumber.from(order.gasFee.gasLimit).mul(gasPriceWei)
 				));
 
 				// Require 1.5x the estimated gas for safety margin
@@ -954,6 +956,10 @@ export class PNLMonitorEngine {
 				logger.warning(`Pre-approval check failed: ${preCheckError.message}, will check again during execution`);
 			}
 
+			// Ensure gas parameters are properly formatted
+			const gasPriceStr = String(order.gasFee.gasPrice || '5');
+			const gasLimitNum = Number(order.gasFee.gasLimit || 300000);
+
 			// Create transaction for queue
 			const transaction = new B_Transaction({
 				type: TransactionType.SELL,
@@ -961,10 +967,8 @@ export class PNLMonitorEngine {
 				token: position.token,
 				tokenAmount: tokenAmountStr,
 				slippage: order.slippage,
-				gasPrice: order.gasFee.gasPrice,
-				gasLimit: order.gasFee.gasLimit,
-				orderId: order._id.toString(),
-				positionId: position.id,
+				gasPrice: gasPriceStr,
+				gasLimit: gasLimitNum,
 				userId: order.userId.toString(),
 				priority: reason === 'STOP_LOSS' ? 100 : 50, // Stop loss has higher priority
 			});

@@ -348,8 +348,10 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		}
 
 		// Estimate gas cost (gasLimit * gasPrice)
+		// gasPrice is in gwei (string), convert to wei (BigNumber)
+		const gasPriceWei = ethers.utils.parseUnits(String(order.gasFee.gasPrice || '5'), 'gwei');
 		const estimatedGasCost = parseFloat(ethers.utils.formatEther(
-			ethers.BigNumber.from(order.gasFee.gasLimit).mul(order.gasFee.gasPrice)
+			ethers.BigNumber.from(order.gasFee.gasLimit).mul(gasPriceWei)
 		));
 
 		// Require at least 1.5x the estimated gas for safety margin
@@ -423,6 +425,10 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 
 		const tokenAmountStr = ethers.utils.formatUnits(tokenAmountWei, position.tokenDecimals);
 
+		// Ensure gas parameters are properly formatted
+		const gasPriceStr = String(order.gasFee.gasPrice || '5');
+		const gasLimitNum = Number(order.gasFee.gasLimit || 300000);
+
 		// Create transaction for queue
 		const transaction = new B_Transaction({
 			type: TransactionType.SELL,
@@ -430,8 +436,8 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 			token: bToken,
 			tokenAmount: tokenAmountStr,
 			slippage: order.slippage,
-			gasPrice: order.gasFee.gasPrice,
-			gasLimit: order.gasFee.gasLimit,
+			gasPrice: gasPriceStr,
+			gasLimit: gasLimitNum,
 			orderId: order._id.toString(),
 			positionId: position._id.toString(),
 			userId: user._id.toString(),
