@@ -328,6 +328,52 @@ export async function handlePositionSell(chatId: string, positionId: string, mes
 		// Set pending sell flag to prevent duplicate sells
 		bPosition.hasPendingSell = true;
 
+		// Check BNB balance for gas
+		const { getBnbBalance } = await import('../../core/wallet/wallet.service');
+		const bnbBalanceResult = await getBnbBalance(wallet.address, false);
+
+		if (!bnbBalanceResult.success || !bnbBalanceResult.balance) {
+			bPosition.hasPendingSell = false;
+			await getBot().editMessageText(
+				`❌ <b>Sell Failed</b>\n\n` +
+				`Token: ${position.tokenSymbol}\n` +
+				`Error: Failed to check BNB balance`,
+				{
+					chat_id: chatId,
+					message_id: processingMsg.message_id,
+					parse_mode: 'HTML',
+				}
+			);
+			return;
+		}
+
+		// Estimate gas cost (gasLimit * gasPrice)
+		const estimatedGasCost = parseFloat(ethers.utils.formatEther(
+			ethers.BigNumber.from(order.gasFee.gasLimit).mul(order.gasFee.gasPrice)
+		));
+
+		// Require at least 1.5x the estimated gas for safety margin
+		const requiredBnb = estimatedGasCost * 1.5;
+
+		if (bnbBalanceResult.balance < requiredBnb) {
+			bPosition.hasPendingSell = false;
+			await getBot().editMessageText(
+				`❌ <b>Insufficient BNB for Gas</b>\n\n` +
+				`Token: ${position.tokenSymbol}\n` +
+				`Wallet: <code>${wallet.address}</code>\n\n` +
+				`💰 Current Balance: ${bnbBalanceResult.balance.toFixed(6)} BNB\n` +
+				`⛽ Required for Gas: ${requiredBnb.toFixed(6)} BNB\n` +
+				`📉 Shortfall: ${(requiredBnb - bnbBalanceResult.balance).toFixed(6)} BNB\n\n` +
+				`Please deposit more BNB to this wallet before selling.`,
+				{
+					chat_id: chatId,
+					message_id: processingMsg.message_id,
+					parse_mode: 'HTML',
+				}
+			);
+			return;
+		}
+
 		// Get actual token balance from blockchain (to avoid precision issues)
 		let tokenAmountWei: string;
 		try {

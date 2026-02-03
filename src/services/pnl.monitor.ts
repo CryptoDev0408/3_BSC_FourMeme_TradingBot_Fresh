@@ -290,13 +290,18 @@ export class PNLMonitorEngine {
 			const triggeredSlLevels: Array<{ index: number; pnlPercent: number; sellPercent: number }> = [];
 
 			if (order) {
+				// Get fresh triggered levels from database to prevent race conditions
+				const dbPosition = await Position.findById(position.id);
+				const dbTriggeredTpLevels = dbPosition?.triggeredTakeProfitLevels || [];
+				const dbTriggeredSlLevels = dbPosition?.triggeredStopLossLevels || [];
+
 				// Check MULTIPLE TP/SL levels (new system)
 				if (order.takeProfitLevels && order.takeProfitLevels.length > 0) {
 					// Check each TP level that hasn't been triggered yet
 					for (let i = 0; i < order.takeProfitLevels.length; i++) {
 						const level = order.takeProfitLevels[i];
-						// Skip if already triggered
-						if (position.triggeredTakeProfitLevels?.includes(i)) {
+						// Skip if already triggered (check DB, not memory)
+						if (dbTriggeredTpLevels.includes(i)) {
 							continue;
 						}
 						// Check if PNL reached this level
@@ -314,8 +319,8 @@ export class PNLMonitorEngine {
 					// Check each SL level that hasn't been triggered yet
 					for (let i = 0; i < order.stopLossLevels.length; i++) {
 						const level = order.stopLossLevels[i];
-						// Skip if already triggered
-						if (position.triggeredStopLossLevels?.includes(i)) {
+						// Skip if already triggered (check DB, not memory)
+						if (dbTriggeredSlLevels.includes(i)) {
 							continue;
 						}
 						// Check if PNL dropped to this level (negative)
@@ -330,8 +335,6 @@ export class PNLMonitorEngine {
 				}
 
 				// Check Time Limit (only for non-manual positions)
-				// Get position from database to check isManual flag
-				const dbPosition = await Position.findById(position.id);
 				if (order.timeLimitEnabled && dbPosition && !dbPosition.isManual) {
 					const timeElapsedMs = Date.now() - position.buyTimestamp.getTime();
 					const timeElapsedSec = timeElapsedMs / 1000;
@@ -541,21 +544,55 @@ export class PNLMonitorEngine {
 			// Mark as having pending sell
 			position.hasPendingSell = true;
 
-			// Get database position to check if this level already triggered
-			const dbPosition = await Position.findById(positionId);
-			if (!dbPosition) {
-				logger.error(`Database position not found: ${positionId}`);
-				position.hasPendingSell = false;
-				return false;
-			}
+			// CRITICAL: Mark level as triggered IMMEDIATELY in database (atomic operation)
+			// This prevents race conditions where multiple cycles detect the same level
+			const updateField = reason === 'TAKE_PROFIT'
+				? 'triggeredTakeProfitLevels'
+				: 'triggeredStopLossLevels';
 
-			// Check if level already triggered (prevent duplicate execution)
-			const triggeredArray = reason === 'TAKE_PROFIT'
-				? dbPosition.triggeredTakeProfitLevels || []
-				: dbPosition.triggeredStopLossLevels || [];
+			try {
+				const updateResult = await Position.findByIdAndUpdate(
+					positionId,
+					{
+						$addToSet: { [updateField]: levelIndex }
+					},
+					{ new: true }
+				);
 
-			if (triggeredArray.includes(levelIndex)) {
-				logger.debug(`Level ${levelIndex} already triggered for position ${positionId}, skipping...`);
+				if (!updateResult) {
+					logger.error(`Database position not found: ${positionId}`);
+					position.hasPendingSell = false;
+					return false;
+				}
+
+				// Check if level was already in the array (means another process beat us to it)
+				const triggeredArray = reason === 'TAKE_PROFIT'
+					? updateResult.triggeredTakeProfitLevels || []
+					: updateResult.triggeredStopLossLevels || [];
+
+				// Count how many times this level appears (should be 1 after $addToSet)
+				const occurrences = triggeredArray.filter(idx => idx === levelIndex).length;
+				if (occurrences > 1) {
+					// This shouldn't happen with $addToSet, but just in case
+					logger.warning(`Level ${levelIndex} found ${occurrences} times, possible race condition detected`);
+				}
+
+				// Update in-memory position immediately
+				if (reason === 'TAKE_PROFIT') {
+					if (!position.triggeredTakeProfitLevels) position.triggeredTakeProfitLevels = [];
+					if (!position.triggeredTakeProfitLevels.includes(levelIndex)) {
+						position.triggeredTakeProfitLevels.push(levelIndex);
+					}
+				} else {
+					if (!position.triggeredStopLossLevels) position.triggeredStopLossLevels = [];
+					if (!position.triggeredStopLossLevels.includes(levelIndex)) {
+						position.triggeredStopLossLevels.push(levelIndex);
+					}
+				}
+
+				logger.info(`✅ Level ${levelIndex} marked as triggered in database`);
+			} catch (dbError: any) {
+				logger.error(`Failed to mark level as triggered: ${dbError.message}`);
 				position.hasPendingSell = false;
 				return false;
 			}
@@ -588,6 +625,32 @@ export class PNLMonitorEngine {
 				position.hasPendingSell = false;
 				await this.notifyError(order, position, `Wallet access failed: ${walletError.message}`);
 				return false;
+			}
+
+			// Check BNB balance for gas
+			try {
+				const bnbBalance = await ethersWallet.getBalance();
+				const ethers = require('ethers');
+				const bnbBalanceFormatted = parseFloat(ethers.utils.formatEther(bnbBalance));
+
+				// Calculate estimated gas cost from order settings
+				const estimatedGasCost = parseFloat(ethers.utils.formatEther(
+					ethers.BigNumber.from(order.gasFee.gasLimit).mul(order.gasFee.gasPrice)
+				));
+
+				// Require 1.5x the estimated gas for safety margin
+				const requiredBnb = estimatedGasCost * 1.5;
+
+				if (bnbBalanceFormatted < requiredBnb) {
+					const errorMsg = `Insufficient BNB for gas: ${bnbBalanceFormatted.toFixed(6)} BNB (need ${requiredBnb.toFixed(6)} BNB, shortfall: ${(requiredBnb - bnbBalanceFormatted).toFixed(6)} BNB)`;
+					logger.error(errorMsg);
+					position.hasPendingSell = false;
+					await this.notifyError(order, position, errorMsg);
+					return false;
+				}
+				logger.info(`BNB balance: ${bnbBalanceFormatted.toFixed(6)} BNB (required: ${requiredBnb.toFixed(6)} BNB, sufficient ✓)`);
+			} catch (balanceError: any) {
+				logger.warning(`Failed to check BNB balance: ${balanceError.message}, proceeding anyway...`);
 			}
 
 			// Get actual token balance
@@ -683,33 +746,17 @@ export class PNLMonitorEngine {
 				logger.error(`Failed to verify transaction receipt: ${receiptError.message}`);
 			}
 
-			// Update database: mark level as triggered and update token amount
+			// Update database: update token amount only (level already marked as triggered earlier)
 			const newBalance = await tokenContract.balanceOf(wallet.address);
 			const newBalanceFormatted = parseFloat(ethers.utils.formatUnits(newBalance, position.token.decimals));
 
-			const updateField = reason === 'TAKE_PROFIT'
-				? 'triggeredTakeProfitLevels'
-				: 'triggeredStopLossLevels';
-
 			await Position.findByIdAndUpdate(positionId, {
-				$addToSet: { [updateField]: levelIndex },
 				tokenAmount: newBalanceFormatted,
 				lastPriceUpdate: new Date(),
 			});
 
-			// Update in-memory position
-			position.tokenAmount = newBalanceFormatted;
-			if (reason === 'TAKE_PROFIT') {
-				if (!position.triggeredTakeProfitLevels) position.triggeredTakeProfitLevels = [];
-				if (!position.triggeredTakeProfitLevels.includes(levelIndex)) {
-					position.triggeredTakeProfitLevels.push(levelIndex);
-				}
-			} else {
-				if (!position.triggeredStopLossLevels) position.triggeredStopLossLevels = [];
-				if (!position.triggeredStopLossLevels.includes(levelIndex)) {
-					position.triggeredStopLossLevels.push(levelIndex);
-				}
-			}
+			// Update in-memory position token amount
+			position.tokenAmount = newBalanceFormatted
 
 			logger.success(`✅ ${levelName} executed: Sold ${sellPercent}%, Remaining: ${newBalanceFormatted} tokens`);
 
