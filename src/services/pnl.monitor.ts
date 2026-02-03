@@ -137,12 +137,12 @@ export class PNLMonitorEngine {
 				await this.processPendingPositions(pendingPositions);
 			}
 
-			// Step 2: Include ALL positions (manual positions now monitored for PNL)
-			// NOTE: Manual buy positions are now set as isManual: false for testing
+			// Step 2: EXCLUDE manual positions from PNL monitoring
+			// Manual buy positions (isManual=true) will NOT trigger automatic TP/SL sells
 			const dbPositionMap = new Map(dbPositions.map(p => [p._id.toString(), p]));
 			const nonManualActivePositions = activePositions.filter(p => {
 				const dbPos = dbPositionMap.get(p.id);
-				// Including all positions - manual flag is now false for testing
+				// Only include non-manual positions for automatic PNL monitoring
 				return dbPos && !dbPos.isManual;
 			});
 

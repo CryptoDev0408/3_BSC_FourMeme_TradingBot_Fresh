@@ -315,11 +315,11 @@ export async function executeManualBuy(
 		// Execute buy
 		const result = await executeBuyOrder(order, order.walletId, tokenAddress);
 
-		// FOR TESTING: Keep position as non-manual (isManual: false) to enable PNL monitoring
-		// This allows TP/SL auto-sell to work on manually bought tokens
+		// Set position as manual (isManual: true) to DISABLE automatic PNL monitoring/TP/SL
+		// Manual positions are excluded from auto-sell logic
 		if (result.success && result.positionId) {
-			await Position.findByIdAndUpdate(result.positionId, { isManual: false });
-			logger.info(`Position ${result.positionId} set as non-manual (PNL monitoring ENABLED)`);
+			await Position.findByIdAndUpdate(result.positionId, { isManual: true });
+			logger.info(`Position ${result.positionId} set as MANUAL (PNL monitoring DISABLED)`);
 		}
 
 		return result;

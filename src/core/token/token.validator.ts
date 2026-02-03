@@ -113,17 +113,40 @@ export class TokenValidator {
 			}
 
 			// Check if pair exists on PancakeSwap V2
-			const pairAddress = await this.factoryContract.getPair(tokenAddress, WBNB_ADDRESS);
+			// Use checksummed addresses for getPair call
+			const checksummedToken = ethers.utils.getAddress(tokenAddress);
+			const checksummedWBNB = ethers.utils.getAddress(WBNB_ADDRESS);
 
-			if (pairAddress === ethers.constants.AddressZero) {
+			logger.info(`Checking PancakeSwap V2 pair for ${symbol} (${checksummedToken})...`);
+
+			let pairAddress: string;
+			try {
+				pairAddress = await this.factoryContract.getPair(checksummedToken, checksummedWBNB);
+				logger.info(`getPair() returned: ${pairAddress}`);
+			} catch (error: any) {
+				logger.error(`getPair() call failed: ${error.message}`);
 				return {
 					isValid: false,
-					error: '⚠️ HIGH RISK: No PancakeSwap V2 pair found! Token may be V3 only, honeypot, or potential rug.',
+					error: `Failed to check PancakeSwap pair: ${error.message}`,
 				};
 			}
 
-			logger.info(`Found PancakeSwap V2 pair: ${pairAddress}`);
+			if (pairAddress === ethers.constants.AddressZero) {
+				logger.warning(`No V2 pair found for ${symbol}. Checking if token has liquidity on other DEXs...`);
+				return {
+					isValid: false,
+					error: '⚠️ HIGH RISK: No PancakeSwap V2 pair found!\n\n' +
+						'⚠️ This token may be:\n' +
+						'• A fake token with a fraudulent launcher\n' +
+						'• Listed only on PancakeSwap V3 (not V2)\n' +
+						'• A honeypot or rug pull scam\n' +
+						'• Not yet paired with WBNB\n\n' +
+						'⚠️ Even if it appears legitimate, the launcher contract may be malicious.\n' +
+						'DO NOT BUY unless you have verified the token contract and liquidity lock.',
+				};
+			}
 
+			logger.success(`✅ Found PancakeSwap V2 pair: ${pairAddress}`);
 			// Get liquidity
 			const pairContract = new ethers.Contract(pairAddress, PANCAKE_PAIR_ABI, this.provider);
 
