@@ -15,14 +15,31 @@ export function setBotInstance(bot: TelegramBot): void {
 }
 
 /**
+ * Get bot instance
+ */
+function getBot(): TelegramBot {
+	if (!botInstance) {
+		throw new Error('Bot instance not initialized in scanner handler');
+	}
+	return botInstance;
+}
+
+/**
  * Show scanner menu with latest tokens
  */
 export async function showScannerMenu(chatId: string, messageId?: number): Promise<void> {
 	try {
+		logger.info(`[Scanner Handler] Fetching scanner data for chat ${chatId}...`);
+
 		// Get scanner status
 		const isActive = scannerService.isActive();
+		logger.info(`[Scanner Handler] Scanner active: ${isActive}`);
+
 		const totalCount = await scannerService.getTotalScannedCount();
+		logger.info(`[Scanner Handler] Total count: ${totalCount}`);
+
 		const latestTokens = await scannerService.getLatestTokens(10);
+		logger.info(`[Scanner Handler] Latest tokens count: ${latestTokens.length}`);
 
 		// Build message
 		let message = `🔍 <b>Four.meme Token Scanner</b>\n\n`;
@@ -37,8 +54,11 @@ export async function showScannerMenu(chatId: string, messageId?: number): Promi
 			for (let i = 0; i < latestTokens.length; i++) {
 				const token = latestTokens[i];
 				const num = i + 1;
-				message += `${num}. <code>${token.symbol}</code> - ${token.name}\n`;
-				message += `   <code>${token.address}</code>\n`;
+				const symbol = token.symbol || 'UNKNOWN';
+				const name = token.name || 'Unknown Token';
+				const address = token.address || 'N/A';
+				message += `${num}. <code>${symbol}</code> - ${name}\n`;
+				message += `   <code>${address}</code>\n`;
 				message += `   Detected: ${formatTimestamp(token.scannedAt)}\n\n`;
 			}
 		}
@@ -56,7 +76,7 @@ export async function showScannerMenu(chatId: string, messageId?: number): Promi
 		// Add token buttons if available
 		if (latestTokens.length > 0) {
 			const tokenButtons = latestTokens.slice(0, 5).map((token, index) => ({
-				text: `${index + 1}. ${token.symbol}`,
+				text: `${index + 1}. ${token.symbol || 'UNKNOWN'}`,
 				callback_data: `scanner_token_${token.address}`,
 			}));
 
@@ -71,21 +91,40 @@ export async function showScannerMenu(chatId: string, messageId?: number): Promi
 
 		// Send or edit message
 		if (messageId) {
-			await botInstance.editMessageText(message, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				await getBot().editMessageText(message, {
+					chat_id: chatId,
+					message_id: messageId,
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+				});
+			} catch (editError: any) {
+				// If edit fails (e.g., message has no text), delete and send new message
+				logger.warning(`Failed to edit message: ${editError.message}, sending new message instead`);
+				try {
+					await getBot().deleteMessage(chatId, messageId);
+				} catch (delError) {
+					logger.warning(`Failed to delete message: ${delError}`);
+				}
+				await getBot().sendMessage(chatId, message, {
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+				});
+			}
 		} else {
-			await botInstance.sendMessage(chatId, message, {
+			await getBot().sendMessage(chatId, message, {
 				parse_mode: 'HTML',
 				reply_markup: keyboard,
 			});
 		}
 	} catch (error: any) {
 		logger.error('Error showing scanner menu:', error.message);
-		await botInstance.sendMessage(chatId, '❌ Error loading scanner data. Please try again.');
+		logger.error('Error stack:', error.stack);
+		try {
+			await getBot().sendMessage(chatId, `❌ Error loading scanner data: ${error.message}\n\nPlease try again.`);
+		} catch (e) {
+			logger.error('Failed to send error message:', e);
+		}
 	}
 }
 
@@ -98,7 +137,7 @@ export async function showTokenDetail(chatId: string, tokenAddress: string, mess
 		const selectedToken = token.find((t) => t.address.toLowerCase() === tokenAddress.toLowerCase());
 
 		if (!selectedToken) {
-			await botInstance.sendMessage(chatId, '❌ Token not found.');
+			await getBot().sendMessage(chatId, '❌ Token not found.');
 			return;
 		}
 
@@ -125,15 +164,29 @@ export async function showTokenDetail(chatId: string, tokenAddress: string, mess
 
 		// Send or edit message
 		if (messageId) {
-			await botInstance.editMessageText(message, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-				disable_web_page_preview: true,
-			});
+			try {
+				await getBot().editMessageText(message, {
+					chat_id: chatId,
+					message_id: messageId,
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+					disable_web_page_preview: true,
+				});
+			} catch (editError: any) {
+				logger.warning(`Failed to edit message: ${editError.message}, sending new message instead`);
+				try {
+					await getBot().deleteMessage(chatId, messageId);
+				} catch (delError) {
+					logger.warning(`Failed to delete message: ${delError}`);
+				}
+				await getBot().sendMessage(chatId, message, {
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+					disable_web_page_preview: true,
+				});
+			}
 		} else {
-			await botInstance.sendMessage(chatId, message, {
+			await getBot().sendMessage(chatId, message, {
 				parse_mode: 'HTML',
 				reply_markup: keyboard,
 				disable_web_page_preview: true,
@@ -141,7 +194,11 @@ export async function showTokenDetail(chatId: string, tokenAddress: string, mess
 		}
 	} catch (error: any) {
 		logger.error('Error showing token detail:', error.message);
-		await botInstance.sendMessage(chatId, '❌ Error loading token details. Please try again.');
+		try {
+			await getBot().sendMessage(chatId, '❌ Error loading token details. Please try again.');
+		} catch (e) {
+			logger.error('Failed to send error message:', e);
+		}
 	}
 }
 
@@ -169,21 +226,38 @@ export async function showScannerStats(chatId: string, messageId?: number): Prom
 		};
 
 		if (messageId) {
-			await botInstance.editMessageText(message, {
-				chat_id: chatId,
-				message_id: messageId,
-				parse_mode: 'HTML',
-				reply_markup: keyboard,
-			});
+			try {
+				await getBot().editMessageText(message, {
+					chat_id: chatId,
+					message_id: messageId,
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+				});
+			} catch (editError: any) {
+				logger.warning(`Failed to edit message: ${editError.message}, sending new message instead`);
+				try {
+					await getBot().deleteMessage(chatId, messageId);
+				} catch (delError) {
+					logger.warning(`Failed to delete message: ${delError}`);
+				}
+				await getBot().sendMessage(chatId, message, {
+					parse_mode: 'HTML',
+					reply_markup: keyboard,
+				});
+			}
 		} else {
-			await botInstance.sendMessage(chatId, message, {
+			await getBot().sendMessage(chatId, message, {
 				parse_mode: 'HTML',
 				reply_markup: keyboard,
 			});
 		}
 	} catch (error: any) {
 		logger.error('Error showing scanner stats:', error.message);
-		await botInstance.sendMessage(chatId, '❌ Error loading statistics. Please try again.');
+		try {
+			await getBot().sendMessage(chatId, '❌ Error loading statistics. Please try again.');
+		} catch (e) {
+			logger.error('Failed to send error message:', e);
+		}
 	}
 }
 
@@ -207,7 +281,7 @@ export async function sendTokenAlert(chatId: string, tokenData: any): Promise<vo
 			],
 		};
 
-		await botInstance.sendMessage(chatId, message, {
+		await getBot().sendMessage(chatId, message, {
 			parse_mode: 'HTML',
 			reply_markup: keyboard,
 		});
@@ -219,18 +293,24 @@ export async function sendTokenAlert(chatId: string, tokenData: any): Promise<vo
 /**
  * Format timestamp
  */
-function formatTimestamp(date: Date): string {
-	const now = new Date();
-	const diff = now.getTime() - new Date(date).getTime();
-	const seconds = Math.floor(diff / 1000);
-	const minutes = Math.floor(seconds / 60);
-	const hours = Math.floor(minutes / 60);
-	const days = Math.floor(hours / 24);
+function formatTimestamp(date: Date | string | undefined): string {
+	try {
+		if (!date) return 'Unknown';
+		const now = new Date();
+		const dateObj = typeof date === 'string' ? new Date(date) : date;
+		const diff = now.getTime() - dateObj.getTime();
+		const seconds = Math.floor(diff / 1000);
+		const minutes = Math.floor(seconds / 60);
+		const hours = Math.floor(minutes / 60);
+		const days = Math.floor(hours / 24);
 
-	if (days > 0) return `${days}d ago`;
-	if (hours > 0) return `${hours}h ago`;
-	if (minutes > 0) return `${minutes}m ago`;
-	return `${seconds}s ago`;
+		if (days > 0) return `${days}d ago`;
+		if (hours > 0) return `${hours}h ago`;
+		if (minutes > 0) return `${minutes}m ago`;
+		return `${seconds}s ago`;
+	} catch (error) {
+		return 'Unknown';
+	}
 }
 
 /**
